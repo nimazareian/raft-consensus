@@ -6,8 +6,8 @@ import com.google.protobuf.gradle.*
  * https://github.com/google/protobuf-gradle-plugin/blob/master/examples/exampleKotlinDslProject/build.gradle.kts
  */
 
-val grpcVersion = "1.57.2";
-val protobufVersion = "3.24.1";
+val grpcVersion = "1.57.2"
+val protobufVersion = "3.24.1"
 
 plugins {
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
@@ -21,7 +21,7 @@ plugins {
 }
 
 application {
-    mainClass.set("cs416.lambda.capstone.App.kt")
+    mainClass.set("cs416.lambda.capstone.AppKt")
 }
 
 
@@ -99,11 +99,6 @@ protobuf {
             }
         }
     }
-}
-
-application {
-    // Define the main class for the application.
-    mainClass.set("App.kt")
 }
 
 tasks.withType<KotlinCompile> {
