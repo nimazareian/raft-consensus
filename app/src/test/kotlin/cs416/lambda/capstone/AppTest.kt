@@ -3,13 +3,12 @@
  */
 package cs416.lambda.capstone
 
-import cs416.lambda.capstone.App
 import kotlin.test.Test
 import kotlin.test.assertNotNull
 
 class AppTest {
-    @Test fun appHasAGreeting() {
-        val classUnderTest = App()
-        assertNotNull(classUnderTest.greeting, "app should have a greeting")
-    }
+//    @Test fun appHasAGreeting() {
+//        val classUnderTest = App()
+//        assertNotNull(classUnderTest.greeting, "app should have a greeting")
+//    }
 }

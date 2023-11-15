@@ -1,6 +1,19 @@
 syntax = "proto3";
 
-message Buy {
+option java_package = "cs416.lambda.capstone";
+option java_outer_classname = "BuyProto";
+
+
+service Greeter {
+  // Sends a greeting
+  rpc BuyStock (BuyRequest) returns (BuyReply) {}
+}
+
+message BuyRequest {
   string stock = 1;
   int32 amount = 2;
+}
+
+message BuyReply {
+  bool purchased = 1;
 }

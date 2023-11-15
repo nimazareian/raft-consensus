@@ -7,6 +7,7 @@ import com.google.protobuf.gradle.*
  */
 
 val grpcVersion = "1.57.2"
+val grpcKotlinVersion = "1.4.0"
 val protobufVersion = "3.24.1"
 
 plugins {
@@ -46,12 +47,12 @@ dependencies {
     // Use the Kotlin JUnit integration.
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
 
-//
-//    implementation("io.grpc:grpc-stub:1.15.1")
-//    implementation("io.grpc:grpc-protobuf:1.15.1") "1.57.2"
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
     implementation("io.grpc:grpc-stub:${grpcVersion}")
+    implementation("io.grpc:grpc-kotlin-stub:${grpcKotlinVersion}")
     implementation("io.grpc:grpc-protobuf:${grpcVersion}")
+
+    runtimeOnly("io.grpc:grpc-netty:${grpcVersion}")
 
     if (JavaVersion.current().isJava9Compatible) {
         // Workaround for @javax.annotation.Generated
