@@ -1,6 +1,7 @@
-package CPSC416_Capstone
+package cs416.lambda.capstone
 
-//import Command;
+import com.google.protobuf.MessageLite
+
 
 class App {
     val greeting: String
@@ -11,6 +12,10 @@ class App {
 
 fun main() {
     println(App().greeting);
+
+    val list = ArrayList<MessageLite>()
+    BuyOuterClass.Buy.AMOUNT_FIELD_NUMBER
+//    list.add()
     
 //    val cmd = Commands.MoreMsg {
 //        bar = "test"

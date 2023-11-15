@@ -1,0 +1,6 @@
+syntax = "proto3";
+
+message Buy {
+  string stock = 1;
+  int32 amount = 2;
+}
