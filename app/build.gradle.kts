@@ -48,6 +48,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit")
 
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
+    implementation("com.google.protobuf:protobuf-kotlin:${protobufVersion}")
     implementation("io.grpc:grpc-stub:${grpcVersion}")
     implementation("io.grpc:grpc-kotlin-stub:${grpcKotlinVersion}")
     implementation("io.grpc:grpc-protobuf:${grpcVersion}")
@@ -89,7 +90,7 @@ protobuf {
             artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
         }
         id("grpckt") {
-            artifact = "io.grpc:protoc-gen-grpc-kotlin:0.1.5"
+            artifact = "io.grpc:protoc-gen-grpc-kotlin:${grpcKotlinVersion}:jdk8@jar"
         }
     }
     generateProtoTasks {
@@ -97,6 +98,12 @@ protobuf {
             it.plugins {
                 id("grpc")
                 id("grpckt")
+            }
+            /**
+             * Inspired from https://github.com/grpc/grpc-kotlin/blob/master/compiler/README.md
+             */
+            it.builtins {
+                id("kotlin")
             }
         }
     }
