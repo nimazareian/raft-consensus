@@ -22,7 +22,16 @@ plugins {
 }
 
 application {
-    mainClass.set("cs416.lambda.capstone.AppKt")
+    // Configure which main class should be run. This should be added to your gradle
+    // run configuration
+    // E.g. Running Server for node 3: `run -Plaunch=Server --args="--nodeId 3"`
+    // E.g. Running Client: `run -Plaunch=Client`
+    if (hasProperty("launch")) {
+        mainClass.set("cs416.lambda.capstone.${property("launch")}MainKt")
+    } else {
+        // Default to launching Server
+        mainClass.set("cs416.lambda.capstone.ServerMainKt")
+    }
 }
 
 
