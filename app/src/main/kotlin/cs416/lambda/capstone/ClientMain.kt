@@ -1,8 +1,7 @@
 package cs416.lambda.capstone
 
-fun main(args: Array<String>) {
-    // TODO:
-    val server = Client(GRPC_PORT)
-//    server.start()
-//    server.blockUntilShutdown()
+suspend fun main() {
+    val client = Client(GRPC_PORT)
+    client.buyStock("GME", 100)
+    client.close()
 }

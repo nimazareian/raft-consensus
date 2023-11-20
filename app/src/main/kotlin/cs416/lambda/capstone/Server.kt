@@ -38,9 +38,9 @@ class Server(
 
     internal class HelloWorldService : GreeterGrpcKt.GreeterCoroutineImplBase() {
         override suspend fun buyStock(request: BuyRequest) = buyReply {
-            println("Buy request received for the amount ${request.amount}")
+            println("Buy request received: $request")
 
-            // Set purchased field to True and reply
+            // Response to client
             purchased = false
         }
     }
