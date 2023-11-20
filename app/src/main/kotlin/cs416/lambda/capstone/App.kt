@@ -31,7 +31,7 @@ class HelloWorldServer(private val port: Int) {
     }
 
     internal class HelloWorldService : GreeterGrpcKt.GreeterCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyProto.BuyRequest) = buyReply {
+        override suspend fun buyStock(request: BuyRequest) = buyReply {
             println("Buy request received for the amount ${request.amount}")
 
             // Set purchased field to True and reply

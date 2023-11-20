@@ -1,7 +1,7 @@
 syntax = "proto3";
 
+option java_multiple_files = true;
 option java_package = "cs416.lambda.capstone";
-option java_outer_classname = "BuyProto";
 
 
 service Greeter {
@@ -16,4 +16,9 @@ message BuyRequest {
 
 message BuyReply {
   bool purchased = 1;
+}
+
+message LogEntry {
+  int32 term = 1;
+  // TODO: Should include the message here as well
 }
