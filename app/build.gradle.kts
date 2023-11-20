@@ -28,6 +28,9 @@ application {
     // E.g. Running Client: `run -Plaunch=Client`
     if (hasProperty("launch")) {
         mainClass.set("cs416.lambda.capstone.${property("launch")}MainKt")
+    } else {
+        // Default to launching Server
+        mainClass.set("cs416.lambda.capstone.ServerMainKt")
     }
 }
 

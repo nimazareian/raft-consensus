@@ -4,9 +4,9 @@ import io.grpc.ManagedChannelBuilder
 import java.io.Closeable
 import java.util.concurrent.TimeUnit
 
-class Client(private val port: Int) : Closeable {
+class Client(port: Int) : Closeable {
     private val channel = ManagedChannelBuilder.forAddress("localhost", port).usePlaintext().build()
-    private val stub: GreeterGrpcKt.GreeterCoroutineStub = GreeterGrpcKt.GreeterCoroutineStub(channel)
+    private val stub: TradeGrpcKt.TradeCoroutineStub = TradeGrpcKt.TradeCoroutineStub(channel)
 
     suspend fun buyStock(stockTicker: String, amountToBuy: Int) {
         val request = buyRequest {

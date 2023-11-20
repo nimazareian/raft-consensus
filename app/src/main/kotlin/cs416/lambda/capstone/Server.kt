@@ -36,7 +36,7 @@ class Server(
         server.awaitTermination()
     }
 
-    internal class HelloWorldService : GreeterGrpcKt.GreeterCoroutineImplBase() {
+    internal class HelloWorldService : TradeGrpcKt.TradeCoroutineImplBase() {
         override suspend fun buyStock(request: BuyRequest) = buyReply {
             println("Buy request received: $request")
 

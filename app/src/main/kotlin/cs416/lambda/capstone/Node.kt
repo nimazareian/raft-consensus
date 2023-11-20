@@ -1,7 +1,5 @@
 package cs416.lambda.capstone
 
-import org.checkerframework.checker.guieffect.qual.UI
-
 enum class NodeState {
     FOLLOWER, CANDIDATE, LEADER
 }
