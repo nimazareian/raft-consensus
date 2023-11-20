@@ -3,21 +3,27 @@ package cs416.lambda.capstone
 import io.grpc.Server
 import io.grpc.ServerBuilder
 
-
-class HelloWorldServer(private val port: Int) {
+/**
+ * Server that manages communication between nodes and clients
+ * and passes messages to Raft Node for processing.
+ */
+class Server(
+    private val port: Int,
+    private val nodeId: UInt,
+) {
     val server: Server = ServerBuilder
         .forPort(port)
         .addService(HelloWorldService())
         .build()
+    val node = Node(nodeId)
 
     fun start() {
         server.start()
-        println("Server started, listening on $port")
+        println("Server $nodeId started, listening on $port")
         Runtime.getRuntime().addShutdownHook(
             Thread {
-                println("*** shutting down gRPC server since JVM is shutting down")
-                this@HelloWorldServer.stop()
-                println("*** server shut down")
+                this@Server.stop()
+                println("Server $nodeId stopped listening on port $port")
             }
         )
     }
@@ -38,10 +44,4 @@ class HelloWorldServer(private val port: Int) {
             purchased = false
         }
     }
-}
-
-fun main() {
-    val server = HelloWorldServer(5000)
-    server.start()
-    server.blockUntilShutdown()
 }

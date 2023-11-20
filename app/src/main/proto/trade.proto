@@ -3,7 +3,7 @@ syntax = "proto3";
 option java_multiple_files = true;
 option java_package = "cs416.lambda.capstone";
 
-
+// TODO: Added for initial testing - remove
 service Greeter {
   // Sends a greeting
   rpc BuyStock (BuyRequest) returns (BuyReply) {}
@@ -16,9 +16,4 @@ message BuyRequest {
 
 message BuyReply {
   bool purchased = 1;
-}
-
-message LogEntry {
-  int32 term = 1;
-  // TODO: Should include the message here as well
 }
