@@ -8,8 +8,10 @@ fun main(args: Array<String>) {
         return
     }
 
-    val nodeId = args[args.indexOf("--nodeId") + 1].toUInt();
-    val server = Server(GRPC_PORT, nodeId)
+    val configs = arrayOf(NodeConfig(1, "abc", 4000))
+
+    val nodeId = args[args.indexOf("--nodeId") + 1].toInt();
+    val server = Server(GRPC_PORT, nodeId, configs)
     server.start()
     server.blockUntilShutdown()
 }

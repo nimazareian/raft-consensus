@@ -5,9 +5,31 @@ option java_package = "cs416.lambda.capstone";
 
 
 service RaftService {
-  // rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+  rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
   rpc RequestVote(VoteRequest) returns (VoteResponse);
-  rpc RequestLog(LogRequest) returns (LogResponse);
+}
+
+message AppendEntriesRequest
+{
+  uint32 leader_id = 1;
+  uint64 current_term = 2;
+  // The length of the log messages that we think the follower/recipient
+  // has already received (i.e. we're not going to send)
+  uint64 prefix_len = 3;
+  uint64 prefix_term = 4;
+  uint64 commit_len = 5;
+  // List of logs that we think the follower/recipient doesn't have
+  repeated LogEntry suffix = 6;
+}
+
+message AppendEntriesResponse
+{
+  uint32 node_id = 1;
+  uint64 current_term = 2;
+  // how many log entries from the leader have been received from the leader
+  uint64 log_ack_len = 3;
+  // True if the LogRequest was received and appended correctly
+  bool is_successful = 4;
 }
 
 // A candidate requesting every other node to vote
@@ -36,27 +58,4 @@ message VoteResponse
 message LogEntry {
   uint64 term = 1;
   // TODO: Should include the message here as well
-}
-
-message LogRequest
-{
-  uint32 leader_id = 1;
-  uint64 current_term = 2;
-  // The length of the log messages that we think the follower/recipient
-  // has already received (i.e. we're not going to send)
-  uint64 prefix_len = 3;
-  uint64 prefix_term = 4;
-  uint64 commit_len = 5;
-  // List of logs that we think the follower/recipient doesn't have
-  repeated LogEntry suffix = 6;
-}
-
-message LogResponse
-{
-  uint32 node_id = 1;
-  uint64 current_term = 2;
-  // how many log entries from the leader have been received from the leader
-  uint64 log_ack_len = 3;
-  // True if the LogRequest was received and appended correctly
-  bool is_successful = 4;
 }

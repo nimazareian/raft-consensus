@@ -2,7 +2,9 @@ package cs416.lambda.capstone
 
 class NodeLogs {
     @Volatile
-    private var log: MutableList<LogEntry> = mutableListOf();
+    var entries: MutableList<LogEntry> = mutableListOf();
+        private set
+
     private var commitIndex: Int? = null;
 
     // TODO: Implement
