@@ -1,9 +1,12 @@
 syntax = "proto3";
 
+import "trade.proto";
+
 option java_multiple_files = true;
 option java_package = "cs416.lambda.capstone";
 
-
+// Messages inspired by the Raft paper
+// https://raft.github.io/raft.pdf
 service RaftService {
   rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
   rpc RequestVote(VoteRequest) returns (VoteResponse);
@@ -11,20 +14,23 @@ service RaftService {
 
 message AppendEntriesRequest
 {
-  uint32 leader_id = 1;
-  uint64 current_term = 2;
+  uint64 current_term = 1;
+  uint32 leader_id = 2;
   // The length of the log messages that we think the follower/recipient
   // has already received (i.e. we're not going to send)
-  uint64 prefix_len = 3;
-  uint64 prefix_term = 4;
+  // i.e. Index of log entry immediately preceding new ones
+  uint64 prev_log_index = 3;
+  // Term of prev_log_index entry
+  uint64 prev_log_term = 4;
   uint64 commit_len = 5;
   // List of logs that we think the follower/recipient doesn't have
-  repeated LogEntry suffix = 6;
+  repeated LogEntry entries = 6;
 }
 
 message AppendEntriesResponse
 {
   uint32 node_id = 1;
+  // Current term that the node is in. Used by leader to update it self
   uint64 current_term = 2;
   // how many log entries from the leader have been received from the leader
   uint64 log_ack_len = 3;
@@ -36,13 +42,13 @@ message AppendEntriesResponse
 message VoteRequest
 {
   // Node ID of the node candidate
-  uint32 node_id = 1;
-  // Term # after it was incremented
+  uint32 candidate_id = 1;
+  // Candidates term # after it was incremented
   uint64 current_term = 2;
   // Used by the recipient to make sure the Candidate is up to date
-  uint64 log_length = 3;
+  uint64 last_log_index = 3;
   // The term in the last log entry
-  uint64 last_term = 4;
+  uint64 last_log_term = 4;
 }
 
 message VoteResponse
@@ -52,10 +58,10 @@ message VoteResponse
   // The term this election is for
   uint64 current_term = 2;
   // True for if this node votes in favor of the Candidate
-  bool vote = 3;
+  bool vote_granted = 3;
 }
 
 message LogEntry {
   uint64 term = 1;
-  // TODO: Should include the message here as well
+  BuyRequest buy_request = 2;
 }

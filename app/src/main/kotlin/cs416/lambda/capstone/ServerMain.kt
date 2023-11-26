@@ -11,7 +11,7 @@ fun main(args: Array<String>) {
     val configs = arrayOf(NodeConfig(1, "abc", 4000))
 
     val nodeId = args[args.indexOf("--nodeId") + 1].toInt();
-    val server = Server(GRPC_PORT, nodeId, configs)
+    val server = Server(nodeId, GRPC_PORT, configs)
     server.start()
     server.blockUntilShutdown()
 }

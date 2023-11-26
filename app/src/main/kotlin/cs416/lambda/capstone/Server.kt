@@ -16,34 +16,41 @@ class Server(
 ) {
     // RPC Sender
     // stub class for node
-    val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
+    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
 
     // RPC Listener
-    val server: Server = ServerBuilder
+    private val tradingService: Server = ServerBuilder
         .forPort(port)
         .addService(TradeService())
         .build()
 
+    private val raftService: Server = ServerBuilder
+        .forPort(port)
+        .addService(RaftService())
+        .build()
+
     // Node for handling Raft state machine
-    val node = Node(nodeId, nodes)
+    private val node = Node(nodeId, nodes)
 
     fun start() {
-        server.start()
-        println("Server $nodeId started, listening on $port")
+        tradingService.start()
+        println("Node $nodeId started, listening on $port")
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
-                println("Server $nodeId stopped listening on port $port")
+                println("Node $nodeId stopped listening on port $port")
             }
         )
     }
 
     private fun stop() {
-        server.shutdown()
+        tradingService.shutdown()
+        raftService.shutdown()
     }
 
     fun blockUntilShutdown() {
-        server.awaitTermination()
+        tradingService.awaitTermination()
+        raftService.awaitTermination()
     }
 
     internal class TradeService : TradeGrpcKt.TradeCoroutineImplBase() {
@@ -55,4 +62,26 @@ class Server(
         }
 
     }
+
+    internal class RaftService : RaftServiceGrpcKt.RaftServiceCoroutineImplBase() {
+        override suspend fun requestVote(request: VoteRequest) = voteResponse {
+            println("Vote request received: $request")
+
+            // Response to client
+            nodeId = this.nodeId
+            currentTerm = 0 // TODO
+            voteGranted = false
+        }
+
+        override suspend fun appendEntries(request: AppendEntriesRequest) = appendEntriesResponse {
+            println("Append request received: $request")
+
+            // Response to client
+            nodeId = this.nodeId
+            currentTerm = 0 // TODO
+            logAckLen = 0 // TODO
+            isSuccessful = false // TODO
+        }
+    }
 }
+

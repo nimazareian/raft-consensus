@@ -3,7 +3,7 @@ package cs416.lambda.capstone
 class NodeLogs {
     @Volatile
     var entries: MutableList<LogEntry> = mutableListOf();
-        private set
+//        private set
 
     private var commitIndex: Int? = null;
 

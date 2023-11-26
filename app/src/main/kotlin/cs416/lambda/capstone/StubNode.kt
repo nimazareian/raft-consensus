@@ -4,20 +4,16 @@ import java.io.Closeable
 import java.util.concurrent.TimeUnit
 
 
-class StubNode(host: String, port: Int) : Closeable {
+class StubNode(val host: String, val port: Int) : Closeable {
     private val channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newBlockingStub(channel)
 
     suspend fun requestVote(request: VoteRequest): VoteResponse {
-        return stub.requestVote(voteRequest {
-
-        })
+        return stub.requestVote(request)
     }
 
     suspend fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
-        return stub.appendEntries(appendEntriesRequest {
-
-        })
+        return stub.appendEntries(request);
     }
 
     override fun close() {
