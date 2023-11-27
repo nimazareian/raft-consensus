@@ -159,11 +159,10 @@ class Node(
         logger.debug { "Append request received: $request" }
 
         // Reset the heartbeat timeout
-        heartBeatTimeoutTimer.resetTimer();
-
+        heartBeatTimeoutTimer.resetTimer()
         // Response to client
-        nodeId = this.nodeId
-        currentTerm = this.currentTerm
+        nodeId = this@Node.nodeId
+        currentTerm = this@Node.currentTerm
         logAckLen = 0 // TODO
         isSuccessful = false // TODO
     }
@@ -283,7 +282,7 @@ class Node(
         // Cancel timers for other states
         sendHeartBeatTimer.cancel();
         electionTimoutTimer.cancel();
-        
+
         // Only listen for heartbeats if we are a follower
         if (stateMachine.state != NodeState.Follower) {
             logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }

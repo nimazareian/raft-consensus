@@ -12,7 +12,7 @@ data class NodeConfig(val id: Int, val host: String, val port: Int)
 class Server(
     private val nodeId: Int,
     private val port: Int,
-    nodeConfigs: Array<NodeConfig>,
+    nodeConfigs: List<NodeConfig>,
 ) {
     // RPC Sender
     // stub class for node
