@@ -1,0 +1,40 @@
+version: "3"
+
+services:
+  node_one:
+    image: app:latest
+    container_name: node_one
+    environment:
+      ID: "50"
+      PORT: "4000"
+      NODES: "51:172.20.0.6:4000,52:172.20.0.7:4000"
+      TIMER: "1000"
+    build:
+      dockerfile: Dockerfile
+      context: .
+    networks:
+      default:
+        ipv4_address: 172.20.0.5
+
+  node_two:
+    image: app:latest
+    container_name: node_two
+    environment:
+      ID: "51"
+      PORT: "4000"
+      NODES: "50:172.20.0.5:4000,52:172.20.0.7:4000"
+      TIMER: "950"
+    build:
+      dockerfile: Dockerfile
+      context: .
+    networks:
+      default:
+        ipv4_address: 172.20.0.6
+
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
