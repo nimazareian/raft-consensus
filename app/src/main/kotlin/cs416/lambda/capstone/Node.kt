@@ -1,14 +1,14 @@
 package cs416.lambda.capstone
 
 import com.tinder.StateMachine
+import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlin.time.Duration
 
+private val logger = KotlinLogging.logger {}
 
 sealed class NodeState {
     object Follower : NodeState()
@@ -18,7 +18,7 @@ sealed class NodeState {
 
 sealed class Event {
     object LeaderFailureSuspected : Event()
-    object ReceivesQuorum : Event()
+    object ReceivedQuorum : Event()
     object NewTermDiscovered : Event()
     object ElectionTimeout : Event()
 }
@@ -26,7 +26,7 @@ sealed class Event {
 sealed class SideEffect {
     object SendRequestVote : SideEffect()
     object StartSendingHeartbeats : SideEffect()
-
+    object ListenForHeartbeats : SideEffect()
 }
 
 class Node(
@@ -60,7 +60,7 @@ class Node(
 
     private val mutex = Mutex();
 
-    private val stateMachine = StateMachine.create<NodeState, Event, SideEffect> {
+    private val stateMachine = StateMachine.create {
         // Start in the follower state
         initialState(NodeState.Follower)
 
@@ -71,11 +71,11 @@ class Node(
         }
 
         state<NodeState.Candidate> {
-            on<Event.ReceivesQuorum> {
+            on<Event.ReceivedQuorum> {
                 transitionTo(NodeState.Leader, SideEffect.StartSendingHeartbeats)
             }
             on<Event.NewTermDiscovered> {
-                transitionTo(NodeState.Follower)
+                transitionTo(NodeState.Follower, SideEffect.ListenForHeartbeats)
             }
             on<Event.ElectionTimeout> {
                 transitionTo(NodeState.Candidate, SideEffect.SendRequestVote)
@@ -84,27 +84,45 @@ class Node(
 
         state<NodeState.Leader> {
             on<Event.NewTermDiscovered> {
-                transitionTo(NodeState.Follower)
+                transitionTo(NodeState.Follower, SideEffect.ListenForHeartbeats)
             }
         }
 
         onTransition {
             val validTransition = it as? StateMachine.Transition.Valid ?: return@onTransition
             when (validTransition.sideEffect) {
-                SideEffect.SendRequestVote -> print("Sending request vote side effect")
-                SideEffect.StartSendingHeartbeats -> print("Sending heartbeat side effect")
-                null -> print("No side effect")
+                SideEffect.SendRequestVote -> startElection()
+                SideEffect.StartSendingHeartbeats -> logger.debug { "Sending heartbeat side effect" }
+                SideEffect.ListenForHeartbeats -> listenForHeartbeats()
+                null -> logger.debug { "No side effect" }
             }
         }
     }
 
-    /**
-     * Heartbeat setup
-     */
-    val scope = CoroutineScope(Dispatchers.Default)
-    val test = tickerFlow(SEND_HEART_BEAT_TIMER).onEach {
-        sendHeartbeat()
-    }.launchIn(scope)
+    /** Heartbeats setup **/
+    // TODO: Whenever we stop using one timer to use another, we might
+    //       have to cancel all previous timers
+
+    // Used by Follower to detect leader failure
+    private val heartBeatTimeoutTimer = ResettableTimer(
+        callback = this::heartBeatTimeout,
+        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 500L,
+        startNow = true
+    )
+
+    // Used by Candidate during elections
+    private val electionTimoutTimer = ResettableTimer(
+        callback = this::electionTimeout,
+        delay = MIN_ELECTION_TIMEOUT_MS,
+        startNow = false
+    )
+
+    // Used by Leader to send heartbeats
+    private val sendHeartBeatTimer = ResettableTimer(
+        callback = this::sendHeartbeat,
+        delay = SEND_HEART_BEAT_TIMER_MS,
+        startNow = false
+    )
 
     /**
      * Node constructor used for loading a node from disk
@@ -121,55 +139,138 @@ class Node(
         this.logs = log;
     }
 
-    private fun tickerFlow(period: Duration, initialDelay: Duration = Duration.ZERO) = flow {
-        delay(initialDelay)
-        while (true) {
-            emit(Unit)
-            delay(period)
+    fun requestVote(request: VoteRequest) = voteResponse {
+        logger.debug { "Vote request received: $request" }
+        nodeId = this.nodeId
+
+        // Response to client
+        currentTerm = request.currentTerm
+
+        if (request.currentTerm >= currentTerm &&
+            (votedFor == null || votedFor == request.candidateId) &&
+            request.lastLogIndex >= logs.commitIndex
+        ) {
+            votedFor = request.candidateId
+            voteGranted = true
+        } else {
+            voteGranted = false
         }
     }
-    private suspend fun sendHeartbeat() {
+
+    fun appendEntries(request: AppendEntriesRequest) = appendEntriesResponse {
+        logger.debug { "Append request received: $request" }
+
+        // Reset the heartbeat timeout
+        heartBeatTimeoutTimer.resetTimer();
+
+        // Response to client
+        nodeId = this.nodeId
+        currentTerm = this.currentTerm
+        logAckLen = 0 // TODO
+        isSuccessful = false // TODO
+    }
+
+    private fun sendHeartbeat() {
         // Only send heartbeats if we are the leader
         if (stateMachine.state != NodeState.Leader) {
+            logger.warn { "Trying to send heartbeat while in state ${stateMachine.state}" }
             return;
         }
 
-        // Asynchronously send heartbeats to all nodes and update the tracked state
-        nodes.map { n -> coroutineScope {
-            print("Sending heartbeat to node ${n.host}:${n.port}")
-            launch {
-                val response = n.appendEntries(appendEntriesRequest {
-                    leaderId = nodeId
-                    currentTerm = currentTerm
-                    prevLogIndex = 0
-                    commitLength = 0
-                    commitLength = 0
-                    logs = NodeLogs()
-                })
+        // TODO: Consider making this non blocking (could look into using coroutineScope)
+        // TODO: Will this block forever if a node is down?
+        runBlocking {
+            // Asynchronously send heartbeats to all nodes and update the tracked state
+            nodes.map { n ->
+                coroutineScope {
+                    launch {
+                        logger.debug { "Sending heartbeat to node ${n.host}:${n.port}" }
+                        val response = n.appendEntries(appendEntriesRequest {
+                            leaderId = nodeId
+                            currentTerm = currentTerm
+                            prevLogIndex = 0 // TODO: update these fields
+                            commitLength = 0 // TODO:
+                            commitLength = 0 // TODO:
+                            // Ignoring entries
+                        })
 
-                print("Received response back from node ${n.host}:${n.port}")
-                mutex.withLock {
-                    if (response.isSuccessful) {
-                        ackedLength[response.nodeId] = response.logAckLen;
-                    }
+                        logger.debug { "Received response back from node ${n.host}:${n.port}" }
+                        mutex.withLock {
+                            if (response.isSuccessful) {
+                                ackedLength[response.nodeId] = response.logAckLen;
+                            }
 
-                    if (response.currentTerm != currentTerm)
-                    {
-                        stateMachine.transition(Event.NewTermDiscovered);
+                            if (response.currentTerm != currentTerm) {
+                                stateMachine.transition(Event.NewTermDiscovered);
+                            }
+                        }
                     }
                 }
             }
         }
+    }
+
+    private fun startElection() {
+        // Only send heartbeats if we are the leader
+        if (stateMachine.state != NodeState.Candidate) {
+            logger.warn { "Trying to start an election while in state ${stateMachine.state}" }
+            return;
+        }
+
+        // Reset votes (we vote for ourself by default)
+        votesReceived = mutableSetOf(nodeId);
+        votedFor = nodeId;
+
+        // Increment term
+        currentTerm += 1;
+
+        // Start timer
+        electionTimoutTimer.resetTimer();
+
+        runBlocking {
+            // Asynchronously send heartbeats to all nodes and update the tracked state
+            nodes.map { n ->
+                coroutineScope {
+                    logger.debug { "Requesting votes to node ${n.host}:${n.port}" }
+                    launch {
+                        val response = n.requestVote(voteRequest {
+                            candidateId = nodeId
+                            currentTerm = currentTerm
+                            lastLogIndex = 0
+                            lastLogTerm = 0
+                        });
+
+                        logger.debug { "Received vote response back from node ${n.host}:${n.port}" }
+                        if (response.voteGranted && response.currentTerm == currentTerm) {
+                            mutex.withLock {
+                                votesReceived.add(response.nodeId);
+                                if (votesReceived.size > nodes.size / 2) {
+                                    stateMachine.transition(Event.ReceivedQuorum);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private fun becomeCandidate() {
+    private fun electionTimeout() {
+        stateMachine.transition(Event.ElectionTimeout)
+    }
+
+    private fun heartBeatTimeout() {
+        stateMachine.transition(Event.LeaderFailureSuspected)
+    }
+
+    private fun listenForHeartbeats() {
+        // Only listen for heartbeats if we are a follower
         if (stateMachine.state != NodeState.Follower) {
-            print("Node $nodeId can't become candidate as it is already a candidate or leader")
+            logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }
+            return;
         }
 
-        currentTerm += 1;
-        votedFor = nodeId;
-        votesReceived = mutableSetOf<Int>();
+        // Reset the heartbeat timeout
+        heartBeatTimeoutTimer.resetTimer();
     }
 }

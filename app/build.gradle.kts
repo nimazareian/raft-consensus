@@ -62,6 +62,9 @@ dependencies {
     // To define state machines
     implementation("com.tinder.statemachine:statemachine:0.2.0")
 
+    // Logger
+    implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
+
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
     implementation("com.google.protobuf:protobuf-kotlin:${protobufVersion}")
     implementation("io.grpc:grpc-stub:${grpcVersion}")

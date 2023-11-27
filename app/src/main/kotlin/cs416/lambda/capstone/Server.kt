@@ -18,6 +18,9 @@ class Server(
     // stub class for node
     private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
 
+    // Node for handling Raft state machine
+    private val node = Node(nodeId, nodes)
+
     // RPC Listener
     private val tradingService: Server = ServerBuilder
         .forPort(port)
@@ -26,11 +29,8 @@ class Server(
 
     private val raftService: Server = ServerBuilder
         .forPort(port)
-        .addService(RaftService())
+        .addService(RaftService(node))
         .build()
-
-    // Node for handling Raft state machine
-    private val node = Node(nodeId, nodes)
 
     fun start() {
         tradingService.start()
@@ -60,27 +60,16 @@ class Server(
             // Response to client
             purchased = false
         }
-
     }
 
-    internal class RaftService : RaftServiceGrpcKt.RaftServiceCoroutineImplBase() {
-        override suspend fun requestVote(request: VoteRequest) = voteResponse {
-            println("Vote request received: $request")
-
-            // Response to client
-            nodeId = this.nodeId
-            currentTerm = 0 // TODO
-            voteGranted = false
+    // Receive RPCs from other nodes and forward to Node implementation
+    internal class RaftService(private val node: Node) : RaftServiceGrpcKt.RaftServiceCoroutineImplBase() {
+        override suspend fun requestVote(request: VoteRequest): VoteResponse {
+            return node.requestVote(request)
         }
 
-        override suspend fun appendEntries(request: AppendEntriesRequest) = appendEntriesResponse {
-            println("Append request received: $request")
-
-            // Response to client
-            nodeId = this.nodeId
-            currentTerm = 0 // TODO
-            logAckLen = 0 // TODO
-            isSuccessful = false // TODO
+        override suspend fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
+            return node.appendEntries(request)
         }
     }
 }

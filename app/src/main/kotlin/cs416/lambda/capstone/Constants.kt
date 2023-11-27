@@ -1,6 +1,6 @@
 package cs416.lambda.capstone
 
-import kotlin.time.Duration.Companion.seconds
-
 const val GRPC_PORT = 5000
-val SEND_HEART_BEAT_TIMER = 2.seconds
+const val SEND_HEART_BEAT_TIMER_MS = 2000L
+const val MIN_HEART_BEAT_TIMEOUT_MS = 3000L
+const val MIN_ELECTION_TIMEOUT_MS = 5000L

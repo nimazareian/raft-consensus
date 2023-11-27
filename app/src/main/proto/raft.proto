@@ -61,7 +61,8 @@ message VoteResponse
   bool vote_granted = 3;
 }
 
-message LogEntry {
+message LogEntry
+{
   uint64 term = 1;
   BuyRequest buy_request = 2;
 }

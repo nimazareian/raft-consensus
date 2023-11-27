@@ -5,21 +5,23 @@ import kotlinx.coroutines.runBlocking
 import kotlin.concurrent.fixedRateTimer
 import kotlin.concurrent.timerTask
 
-class ResettableTimer(private val callback: suspend () -> Int, private val delay: Long)
+class ResettableTimer(private val callback: () -> Unit, private val delay: Long, startNow: Boolean)
 {
-    private var timer = startTimer()
+    private var timer = if (startNow) startTimer() else null
 
     fun resetTimer() {
-        timer.cancel()
+        timer?.cancel()
         timer = startTimer()
+    }
+
+    fun cancel() {
+        timer?.cancel()
     }
 
     private fun startTimer(): Timer {
         val newTimer = Timer()
         newTimer.schedule(timerTask {
-            runBlocking {
-                callback()
-            }
+            callback()
         }, delay)
         return newTimer
     }
