@@ -237,7 +237,7 @@ class Node(
             // Asynchronously send heartbeats to all nodes and update the tracked state
             nodes.map { n ->
                 coroutineScope {
-                    logger.debug { "Requesting votes to node ${n.host}:${n.port}" }
+                    logger.warn { "Requesting votes to node ${n.host}:${n.port}" }
                     launch {
                         val response = n.requestVote(voteRequest {
                             candidateId = this@Node.nodeId

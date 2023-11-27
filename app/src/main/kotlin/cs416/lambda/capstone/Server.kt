@@ -11,7 +11,8 @@ data class NodeConfig(val id: Int, val host: String, val port: Int)
  */
 class Server(
     private val nodeId: Int,
-    private val port: Int,
+    private val serverPort: Int,
+    private val clientPort: Int,
     nodeConfigs: List<NodeConfig>,
 ) {
     // RPC Sender
@@ -23,34 +24,35 @@ class Server(
 
     // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
-        .forPort(port)
+        .forPort(serverPort)
         .addService(RaftService(node))
         .build()
 
     // RPC Listener for trading with client
     private val tradingService: Server = ServerBuilder
-        .forPort(port)
+        .forPort(clientPort)
         .addService(TradeService())
         .build()
 
     fun start() {
-        tradingService.start()
-        println("Node $nodeId started, listening on $port")
+//        tradingService.start()
+//        println("Node $nodeId started, listening on $clientPort for client requests")
+        println("Node $nodeId started, listening on $serverPort for node requests")
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
-                println("Node $nodeId stopped listening on port $port")
+                println("Node $nodeId stopped listening on port $serverPort")
             }
         )
     }
 
     private fun stop() {
-        tradingService.shutdown()
+//        tradingService.shutdown()
         raftService.shutdown()
     }
 
     fun blockUntilShutdown() {
-        tradingService.awaitTermination()
+//        tradingService.awaitTermination()
         raftService.awaitTermination()
     }
 

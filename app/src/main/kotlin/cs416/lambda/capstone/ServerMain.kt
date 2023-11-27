@@ -1,10 +1,9 @@
 package cs416.lambda.capstone
 
-fun main(args: Array<String>) {
-    // TODO: Added for initial testing - Remove
-
+fun main() {
     val env = System.getenv()
     val nodeId = env.getOrDefault("ID", "50").toInt()
+    val serverPort = env.getOrDefault("PORT", DEFAULT_SERVER_GRPC_PORT).toInt()
     val configs: List<NodeConfig> = env.getOrDefault("NODES", "50:localhost:4040")
         .split(",")
         .map {
@@ -16,7 +15,10 @@ fun main(args: Array<String>) {
             NodeConfig(uri[0].toInt(), uri[1], uri[2].toInt())
         }.toList()
 
-    val server = Server(nodeId, GRPC_PORT, configs)
+    print("Node $nodeId started, listening on $serverPort for node requests")
+    print("Other nodes: $configs")
+
+    val server = Server(nodeId, serverPort, CLIENT_GRPC_PORT, configs)
     server.start()
     server.blockUntilShutdown()
 }

@@ -2,34 +2,53 @@ version: "3"
 
 services:
   node_one:
-    image: app:latest
+    image: raft-trading-server:latest
     container_name: node_one
+    ports:
+      # HOST:CONTAINER
+      - "4001:4000"
     environment:
-      ID: "50"
+      ID: "1"
       PORT: "4000"
-      NODES: "51:172.20.0.6:4000,52:172.20.0.7:4000"
-      TIMER: "1000"
+      NODES: "2:172.20.0.2:4000,3:172.20.0.3:4000"
     build:
       dockerfile: Dockerfile
       context: .
     networks:
       default:
-        ipv4_address: 172.20.0.5
+        ipv4_address: 172.20.0.1
 
   node_two:
-    image: app:latest
+    image: raft-trading-server:latest
     container_name: node_two
+    ports:
+      - "4002:4000"
     environment:
-      ID: "51"
+      ID: "2"
       PORT: "4000"
-      NODES: "50:172.20.0.5:4000,52:172.20.0.7:4000"
-      TIMER: "950"
+      NODES: "1:172.20.0.1:4000,3:172.20.0.3:4000"
     build:
       dockerfile: Dockerfile
       context: .
     networks:
       default:
-        ipv4_address: 172.20.0.6
+        ipv4_address: 172.20.0.2
+
+  node_three:
+    image: raft-trading-server:latest
+    container_name: node_three
+    ports:
+      - "4003:4000"
+    environment:
+      ID: "3"
+      PORT: "4000"
+      NODES: "1:172.20.0.1:4000,2:172.20.0.2:4000"
+    build:
+      dockerfile: Dockerfile
+      context: .
+    networks:
+      default:
+        ipv4_address: 172.20.0.3
 
 
 networks:

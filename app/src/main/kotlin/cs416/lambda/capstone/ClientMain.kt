@@ -1,7 +1,7 @@
 package cs416.lambda.capstone
 
 suspend fun main() {
-    val client = Client(GRPC_PORT)
+    val client = Client(CLIENT_GRPC_PORT)
     client.buyStock("GME", 100)
     client.close()
 }

@@ -5,7 +5,7 @@ Distributed day trading server
 
 You can create an image by locally building it with the following command:
 
-`docker build --tag=app:latest`.
+`docker build -t raft-trading-server:latest .`
 
 To run a test simulation, you can start a docker network that will run a node server in every container
 
