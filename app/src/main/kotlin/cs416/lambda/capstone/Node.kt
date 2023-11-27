@@ -58,7 +58,7 @@ class Node(
 
     private val mutex = Mutex();
 
-    private val stateMachine = StateMachine.create {
+    private val stateMachine = StateMachine.create<NodeState, Event, SideEffect> {
         // Start in the follower state
         initialState(NodeState.Follower)
 
