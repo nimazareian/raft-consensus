@@ -16,7 +16,7 @@ services:
       context: .
     networks:
       default:
-        ipv4_address: 172.20.0.1
+        ipv4_address: 172.20.0.4
 
   node_two:
     image: raft-trading-server:latest
@@ -26,7 +26,7 @@ services:
     environment:
       ID: "2"
       PORT: "4000"
-      NODES: "1:172.20.0.1:4000,3:172.20.0.3:4000"
+      NODES: "1:172.20.0.4:4000,3:172.20.0.3:4000"
     build:
       dockerfile: Dockerfile
       context: .
@@ -42,7 +42,7 @@ services:
     environment:
       ID: "3"
       PORT: "4000"
-      NODES: "1:172.20.0.1:4000,2:172.20.0.2:4000"
+      NODES: "1:172.20.0.4:4000,2:172.20.0.2:4000"
     build:
       dockerfile: Dockerfile
       context: .
