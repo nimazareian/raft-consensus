@@ -63,6 +63,9 @@ dependencies {
     implementation("com.tinder.statemachine:statemachine:0.2.0")
 
     // Logger
+//    implementation("org.slf4j:slf4j-api:$SL4J_VERSION")
+    implementation("org.slf4j:slf4j-api:2.0.7")
+    implementation("org.slf4j:slf4j-simple:2.0.7")
     implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")

@@ -15,21 +15,22 @@ class Server(
     nodeConfigs: List<NodeConfig>,
 ) {
     // RPC Sender
-    // stub class for node
+    // stub class for communicating with other nodes
     private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
 
-    // Node for handling Raft state machine
+    // Node for handling Raft state machine of this node
     private val node = Node(nodeId, nodes)
 
-    // RPC Listener
-    private val tradingService: Server = ServerBuilder
-        .forPort(port)
-        .addService(TradeService())
-        .build()
-
+    // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
         .forPort(port)
         .addService(RaftService(node))
+        .build()
+
+    // RPC Listener for trading with client
+    private val tradingService: Server = ServerBuilder
+        .forPort(port)
+        .addService(TradeService())
         .build()
 
     fun start() {

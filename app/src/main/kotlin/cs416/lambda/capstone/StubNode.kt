@@ -8,11 +8,11 @@ class StubNode(val host: String, val port: Int) : Closeable {
     private val channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newBlockingStub(channel)
 
-    suspend fun requestVote(request: VoteRequest): VoteResponse {
+    fun requestVote(request: VoteRequest): VoteResponse {
         return stub.requestVote(request)
     }
 
-    suspend fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
+    fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
         return stub.appendEntries(request);
     }
 
