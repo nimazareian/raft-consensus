@@ -4,11 +4,11 @@ import java.io.Closeable
 import java.util.concurrent.TimeUnit
 
 
-class StubNode(val host: String, val port: Int) : Closeable {
-    private val channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
+class StubNode(val address: String, val port: Int) : Closeable {
+    private val channel = ManagedChannelBuilder.forAddress(address, port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newBlockingStub(channel)
     init {
-        println("StubNode $host:$port created")
+        println("StubNode $address:$port created")
     }
 
     fun requestVote(request: VoteRequest): VoteResponse {
@@ -24,6 +24,6 @@ class StubNode(val host: String, val port: Int) : Closeable {
     }
 
     override fun toString(): String {
-        return "StubNode(host='$host', port=$port)"
+        return "StubNode(host='$address', port=$port)"
     }
 }

@@ -1,9 +1,11 @@
 package cs416.lambda.capstone
 
+import cs416.lambda.capstone.config.NodeConfig
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Server
 import io.grpc.ServerBuilder
 
-data class NodeConfig(val id: Int, val host: String, val port: Int)
+private val logger = KotlinLogging.logger {}
 
 /**
  * Server that manages communication between nodes and clients
@@ -17,7 +19,7 @@ class Server(
 ) {
     // RPC Sender
     // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
+    private val nodes = ArrayList<StubNode>(nodeConfigs.map { n -> StubNode(n.address, n.port) })
 
     // Node for handling Raft state machine of this node
     private val node = Node(nodeId, nodes)
@@ -38,7 +40,7 @@ class Server(
 //        tradingService.start()
 //        println("Node $nodeId started, listening on $clientPort for client requests")
         raftService.start()
-        println("Node $nodeId started, listening on $serverPort for node requests")
+        logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
