@@ -31,6 +31,9 @@ class Node(
     private val nodeId: Int,
     private val nodes: ArrayList<StubNode>
 ) {
+    init {
+        logger.info { "Node $nodeId created" }
+    }
     private var currentTerm: Long = 0;
     private var currentLeader: Int? = null;
     private var logs = NodeLogs();
@@ -105,21 +108,22 @@ class Node(
     private val heartBeatTimeoutTimer = ResettableTimer(
         callback = this::heartBeatTimeout,
         delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 500L,
-        startNow = true
+        startNow = true,
+        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 500L,
     )
 
     // Used by Candidate during elections
     private val electionTimoutTimer = ResettableTimer(
         callback = this::electionTimeout,
         delay = MIN_ELECTION_TIMEOUT_MS,
-        startNow = false
+        startNow = false,
     )
 
     // Used by Leader to send heartbeats
     private val sendHeartBeatTimer = ResettableTimer(
         callback = this::sendHeartbeat,
         delay = SEND_HEART_BEAT_TIMER_MS,
-        startNow = false
+        startNow = false,
     )
 
     /**
@@ -148,6 +152,7 @@ class Node(
             (votedFor == null || votedFor == request.candidateId) &&
             request.lastLogIndex >= logs.commitIndex
         ) {
+            // TODO: When do we reset votedFor
             votedFor = request.candidateId
             voteGranted = true
         } else {

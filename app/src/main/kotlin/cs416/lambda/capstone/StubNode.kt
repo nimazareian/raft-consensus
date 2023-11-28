@@ -7,6 +7,9 @@ import java.util.concurrent.TimeUnit
 class StubNode(val host: String, val port: Int) : Closeable {
     private val channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newBlockingStub(channel)
+    init {
+        println("StubNode $host:$port created")
+    }
 
     fun requestVote(request: VoteRequest): VoteResponse {
         return stub.requestVote(request)
