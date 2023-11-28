@@ -161,15 +161,28 @@ class Node(
     }
 
     fun appendEntries(request: AppendEntriesRequest) = appendEntriesResponse {
-        logger.debug { "Append request received: $request" }
+        logger.debug { "Append request received: $request from leader ${request.leaderId}" }
 
         // Reset the heartbeat timeout
-        heartBeatTimeoutTimer.resetTimer()
+        if (stateMachine.state != NodeState.Leader)
+        {
+            logger.debug { "Resetting timer!" }
+            heartBeatTimeoutTimer.resetTimer()
+        }
+
         // Response to client
         nodeId = this@Node.nodeId
         currentTerm = this@Node.currentTerm
+        if (request.currentTerm > this@Node.currentTerm) {
+            isSuccessful = false
+        } else {
+            isSuccessful = true
+        }
+
+        // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
+        //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
+
         logAckLen = 0 // TODO
-        isSuccessful = false // TODO
     }
 
     private fun sendHeartbeat() {

@@ -5,8 +5,17 @@
         </encoder>
     </appender>
     <logger name="ch.qos.logback" level="OFF"/>
-
     <root level="debug">
         <appender-ref ref="STDOUT" />
     </root>
+
+
+    <logger name="cs416.lambda.capstone.Node" level="debug">
+        <appender-ref ref="STDOUT" />
+    </logger>
+
+    <root level="info">
+        <appender-ref ref="STDOUT" />
+    </root>
+
 </configuration>
