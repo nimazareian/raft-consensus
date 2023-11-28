@@ -9,8 +9,8 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-
-    <logger name="cs416.lambda.capstone.Node" level="debug">
+<!--    Only show logs from Node class-->
+    <logger name="cs416.lambda.capstone.Node" level="debug" additivity="false">
         <appender-ref ref="STDOUT" />
     </logger>
 
