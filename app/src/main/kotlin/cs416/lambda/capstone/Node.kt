@@ -178,6 +178,7 @@ class Node(
             logger.warn { "Trying to send heartbeat while in state ${stateMachine.state}" }
             return;
         }
+        logger.info { "Sending heartbeat" }
 
         // TODO: Note that doing the timer like this could result in the heartbeats
         //       not be the exact same duration apart.
@@ -227,6 +228,7 @@ class Node(
             logger.warn { "Trying to start an election while in state ${stateMachine.state}" }
             return;
         }
+        logger.debug { "Starting election" }
 
         // Reset votes (we vote for ourself by default)
         votesReceived = mutableSetOf(nodeId);
@@ -241,8 +243,8 @@ class Node(
         runBlocking {
             // Asynchronously send heartbeats to all nodes and update the tracked state
             nodes.map { n ->
+                logger.debug { "Requesting vote from node ${n.host}:${n.port}" }
                 coroutineScope {
-                    logger.warn { "Requesting votes to node ${n.host}:${n.port}" }
                     launch {
                         val response = n.requestVote(voteRequest {
                             candidateId = this@Node.nodeId

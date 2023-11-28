@@ -37,6 +37,7 @@ class Server(
     fun start() {
 //        tradingService.start()
 //        println("Node $nodeId started, listening on $clientPort for client requests")
+        raftService.start()
         println("Node $nodeId started, listening on $serverPort for node requests")
         Runtime.getRuntime().addShutdownHook(
             Thread {
