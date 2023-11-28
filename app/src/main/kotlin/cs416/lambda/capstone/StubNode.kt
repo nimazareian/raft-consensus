@@ -11,7 +11,8 @@ class StubNode(val host: String, val port: Int, private val requestVoteResponseO
     private val stub = RaftServiceGrpc.newStub(channel)
 
     init {
-        stub.withWaitForReady()
+        // TODO: Should we wait till the channel is ready?
+        // stub.withWaitForReady()
         println("StubNode $host:$port created")
     }
 
