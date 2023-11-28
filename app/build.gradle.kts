@@ -1,3 +1,4 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.google.protobuf.gradle.*
 
@@ -11,6 +12,9 @@ val grpcKotlinVersion = "1.4.0"
 val protobufVersion = "3.24.1"
 
 plugins {
+    // for building a fatty jar
+    id("com.github.johnrengelman.shadow") version "8.1.1"
+
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     id("org.jetbrains.kotlin.jvm") version "1.9.10"
 
@@ -62,6 +66,10 @@ dependencies {
     // To define state machines
     implementation("com.tinder.statemachine:statemachine:0.2.0")
 
+    // For config loading
+    implementation("com.sksamuel.hoplite:hoplite-core:2.7.5")
+    implementation("com.sksamuel.hoplite:hoplite-json:2.7.5")
+
     // Logger
     // Can enable DEBUG level logging by setting the environment variable LOG_LEVEL=DEBUG
     implementation("org.slf4j:slf4j-api:2.0.7")
@@ -83,25 +91,6 @@ dependencies {
         implementation("javax.annotation:javax.annotation-api:1.3.1")
     }
 }
-
-tasks.jar {
-    manifest {
-        attributes["Main-Class"] = application.mainClass.get()
-    }
-
-    from(sourceSets.main.get().output)
-
-    dependsOn(configurations.runtimeClasspath)
-
-    from({
-        configurations.runtimeClasspath.get().filter { it.name.endsWith("jar") }.map { zipTree(it) }
-    })
-
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-
-
 
 protobuf {
     protoc {
@@ -129,6 +118,17 @@ protobuf {
             }
         }
     }
+}
+
+// required for correct build execution tasks order
+tasks.named("startScripts").configure { dependsOn("shadowJar") }
+tasks.named("startShadowScripts").configure { dependsOn("jar") }
+
+// packages a fat jar with all dependencies included.
+tasks.withType<ShadowJar> {
+    manifest.attributes["Main-Class"] = application.mainClass.get()
+    archiveFileName.set("app.jar")
+    mergeServiceFiles()
 }
 
 tasks.withType<KotlinCompile> {
