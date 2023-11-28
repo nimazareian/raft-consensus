@@ -10,7 +10,6 @@ services:
     environment:
       ID: "1"
       PORT: "4000"
-      NODES: "2:172.20.0.2:4000,3:172.20.0.3:4000"
     build:
       dockerfile: Dockerfile
       context: .
@@ -26,7 +25,6 @@ services:
     environment:
       ID: "2"
       PORT: "4000"
-      NODES: "1:172.20.0.4:4000,3:172.20.0.3:4000"
     build:
       dockerfile: Dockerfile
       context: .
@@ -42,7 +40,6 @@ services:
     environment:
       ID: "3"
       PORT: "4000"
-      NODES: "1:172.20.0.4:4000,2:172.20.0.2:4000"
     build:
       dockerfile: Dockerfile
       context: .
