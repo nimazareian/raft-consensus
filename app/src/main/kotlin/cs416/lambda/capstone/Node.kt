@@ -106,22 +106,25 @@ class Node(
                 return;
             }
 
-            // TODO: Add mutex lock
-            if (response.voteGranted && response.currentTerm == currentTerm) {
-                logger.debug { "Received vote response back from node ${response.nodeId}" }
-                votesReceived.add(response.nodeId);
-                if (votesReceived.size > (nodes.size + 1) / 2.0) {
-                    logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
-                    stateMachine.transition(Event.ReceivedQuorum);
-                }
-            } else {
-                logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
-            }
+            runBlocking {
+                mutex.withLock {
+                    if (response.voteGranted && response.currentTerm == currentTerm) {
+                        logger.debug { "Received vote response back from node ${response.nodeId}" }
+                        votesReceived.add(response.nodeId);
+                        if (votesReceived.size > (nodes.size + 1) / 2.0) {
+                            logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
+                            stateMachine.transition(Event.ReceivedQuorum);
+                        }
+                    } else {
+                        logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
+                    }
 
-            if (response.currentTerm > currentTerm) {
-                logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
-                currentTerm = response.currentTerm;
-                stateMachine.transition(Event.NewTermDiscovered);
+                    if (response.currentTerm > currentTerm) {
+                        logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
+                        currentTerm = response.currentTerm;
+                        stateMachine.transition(Event.NewTermDiscovered);
+                    }
+                }
             }
         }
 
@@ -142,16 +145,19 @@ class Node(
                 return;
             }
 
-            // TODO: Add mutex lock
-            logger.debug { "Received response back from node ${response.nodeId}" }
-            if (response.isSuccessful) {
-                ackedLength[response.nodeId] = response.logAckLen;
-            }
+            runBlocking {
+                mutex.withLock {
+                    logger.debug { "Received response back from node ${response.nodeId}" }
+                    if (response.isSuccessful) {
+                        ackedLength[response.nodeId] = response.logAckLen;
+                    }
 
-            if (response.currentTerm > currentTerm) {
-                logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-                currentTerm = response.currentTerm;
-                stateMachine.transition(Event.NewTermDiscovered);
+                    if (response.currentTerm > currentTerm) {
+                        logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+                        currentTerm = response.currentTerm;
+                        stateMachine.transition(Event.NewTermDiscovered);
+                    }
+                }
             }
         }
 
