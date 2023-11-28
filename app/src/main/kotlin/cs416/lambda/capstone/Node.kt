@@ -32,8 +32,8 @@ class Node(
     private val nodes: ArrayList<StubNode>
 ) {
     init {
-        logger.info { "Node $nodeId created" }
-        logger.info { "Known stub nodes include $nodes" }
+        logger.debug { "Node $nodeId created" }
+        logger.debug { "Known stub nodes include $nodes" }
     }
     private var currentTerm: Long = 0;
     private var currentLeader: Int? = null;
@@ -47,6 +47,7 @@ class Node(
      * Fields used for leader election
      */
     private var votesReceived = mutableSetOf<Int>();
+    // The node that we voted for in the *current term*
     private var votedFor: Int? = null;
 
     /**
@@ -146,6 +147,13 @@ class Node(
         logger.debug { "VoteRequest received: $request" }
         nodeId = this@Node.nodeId
 
+        if (request.currentTerm > this@Node.currentTerm) {
+            logger.debug { "Discovered new term ${request.currentTerm} from VoteRequest from candidate ${request.candidateId}" }
+            votedFor = null
+            this@Node.currentTerm = request.currentTerm;
+            stateMachine.transition(Event.NewTermDiscovered);
+        }
+
         // Response to client
         currentTerm = request.currentTerm
 
@@ -158,13 +166,19 @@ class Node(
             votedFor = request.candidateId
             voteGranted = true
         } else {
-            logger.debug { "Denied vote request to ${request.candidateId} since I have already voted for $votedFor" }
+            logger.debug { "Denied vote request to ${request.candidateId} for term ${request.currentTerm} since I have already voted for $votedFor" }
             voteGranted = false
         }
     }
 
     fun appendEntries(request: AppendEntriesRequest) = appendEntriesResponse {
         logger.debug { "Append request received: $request from leader ${request.leaderId}" }
+
+        if (request.currentTerm > this@Node.currentTerm) {
+            logger.debug { "Discovered new term ${request.currentTerm} from AppendEntriesRequest from leader ${request.leaderId}" }
+            this@Node.currentTerm = request.currentTerm;
+            stateMachine.transition(Event.NewTermDiscovered);
+        }
 
         // Reset the heartbeat timeout
         if (stateMachine.state != NodeState.Leader)
@@ -194,7 +208,6 @@ class Node(
             logger.warn { "Trying to send heartbeat while in state ${stateMachine.state}" }
             return;
         }
-        logger.info { "Sending heartbeat" }
 
         // TODO: Note that doing the timer like this could result in the heartbeats
         //       not be the exact same duration apart.
@@ -219,14 +232,14 @@ class Node(
                         })
 
                         logger.debug { "Received response back from node ${n.host}:${n.port}" }
-                        mutex.withLock {
-                            if (response.isSuccessful) {
-                                ackedLength[response.nodeId] = response.logAckLen;
-                            }
+                        if (response.isSuccessful) {
+                            ackedLength[response.nodeId] = response.logAckLen;
+                        }
 
-                            if (response.currentTerm != currentTerm) {
-                                stateMachine.transition(Event.NewTermDiscovered);
-                            }
+                        if (response.currentTerm > currentTerm) {
+                            logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+                            currentTerm = response.currentTerm;
+                            stateMachine.transition(Event.NewTermDiscovered);
                         }
                     }
                 }
@@ -259,9 +272,7 @@ class Node(
 
         runBlocking {
             // Asynchronously send heartbeats to all nodes and update the tracked state
-            nodes.parallelStream().map {
-
-            }
+            logger.debug { "Mapping over nodes $nodes" }
             nodes.map { n ->
                 logger.debug { "Requesting vote from node ${n.host}:${n.port}" }
                 coroutineScope {
@@ -284,6 +295,12 @@ class Node(
                             }
                         } else {
                             logger.debug { "Received vote response back from node ${n.host}:${n.port} but it was not granted" }
+                        }
+
+                        if (response.currentTerm > currentTerm) {
+                            logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
+                            currentTerm = response.currentTerm;
+                            stateMachine.transition(Event.NewTermDiscovered);
                         }
                     }
                 }
@@ -318,7 +335,7 @@ class Node(
         electionTimoutTimer.cancel();
 
         // Only listen for heartbeats if we are a follower
-        if (stateMachine.state != NodeState.Follower) {
+        if (stateMachine.state == NodeState.Leader) {
             logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }
             return;
         }

@@ -22,4 +22,8 @@ class StubNode(val host: String, val port: Int) : Closeable {
     override fun close() {
         channel.shutdown().awaitTermination(5, TimeUnit.SECONDS)
     }
+
+    override fun toString(): String {
+        return "StubNode(host='$host', port=$port)"
+    }
 }
