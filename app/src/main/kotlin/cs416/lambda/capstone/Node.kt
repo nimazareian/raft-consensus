@@ -33,6 +33,7 @@ class Node(
 ) {
     init {
         logger.info { "Node $nodeId created" }
+        logger.info { "Known stub nodes include $nodes" }
     }
     private var currentTerm: Long = 0;
     private var currentLeader: Int? = null;
@@ -107,9 +108,9 @@ class Node(
     // Used by Follower to detect leader failure
     private val heartBeatTimeoutTimer = ResettableTimer(
         callback = this::heartBeatTimeout,
-        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 500L,
+        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
         startNow = true,
-        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 500L,
+        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
     )
 
     // Used by Candidate during elections
@@ -142,7 +143,7 @@ class Node(
     }
 
     fun requestVote(request: VoteRequest) = voteResponse {
-        logger.debug { "Vote request received: $request" }
+        logger.debug { "VoteRequest received: $request" }
         nodeId = this@Node.nodeId
 
         // Response to client
@@ -153,9 +154,11 @@ class Node(
             request.lastLogIndex >= logs.commitIndex
         ) {
             // TODO: When do we reset votedFor
+            logger.debug { "Accepted vote request and voting for ${request.candidateId}" }
             votedFor = request.candidateId
             voteGranted = true
         } else {
+            logger.debug { "Denied vote request to ${request.candidateId} since I have already voted for $votedFor" }
             voteGranted = false
         }
     }
@@ -166,7 +169,7 @@ class Node(
         // Reset the heartbeat timeout
         if (stateMachine.state != NodeState.Leader)
         {
-            logger.debug { "Resetting timer!" }
+            logger.debug { "Received AppendEntriesRequest resetting heartbeat timer" }
             heartBeatTimeoutTimer.resetTimer()
         }
 
@@ -241,7 +244,6 @@ class Node(
             logger.warn { "Trying to start an election while in state ${stateMachine.state}" }
             return;
         }
-        logger.debug { "Starting election" }
 
         // Reset votes (we vote for ourself by default)
         votesReceived = mutableSetOf(nodeId);
@@ -253,8 +255,13 @@ class Node(
         // Start timer
         electionTimoutTimer.resetTimer();
 
+        logger.debug { "Starting election for term $currentTerm" }
+
         runBlocking {
             // Asynchronously send heartbeats to all nodes and update the tracked state
+            nodes.parallelStream().map {
+
+            }
             nodes.map { n ->
                 logger.debug { "Requesting vote from node ${n.host}:${n.port}" }
                 coroutineScope {
@@ -266,14 +273,17 @@ class Node(
                             lastLogTerm = 0
                         });
 
-                        logger.debug { "Received vote response back from node ${n.host}:${n.port}" }
                         if (response.voteGranted && response.currentTerm == currentTerm) {
+                            logger.debug { "Received vote response back from node ${n.host}:${n.port}" }
                             mutex.withLock {
                                 votesReceived.add(response.nodeId);
-                                if (votesReceived.size > nodes.size / 2) {
+                                if (votesReceived.size > (nodes.size + 1) / 2.0) {
+                                    logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
                                     stateMachine.transition(Event.ReceivedQuorum);
                                 }
                             }
+                        } else {
+                            logger.debug { "Received vote response back from node ${n.host}:${n.port} but it was not granted" }
                         }
                     }
                 }
@@ -290,6 +300,8 @@ class Node(
     }
 
     private fun startSendingHeartBeats() {
+        logger.debug { "Starting to send heartbeats" }
+
         // Cancel timers for previous states
         heartBeatTimeoutTimer.cancel();
         electionTimoutTimer.cancel();
@@ -299,6 +311,8 @@ class Node(
     }
 
     private fun listenForHeartbeats() {
+        logger.debug { "Listening" }
+
         // Cancel timers for other states
         sendHeartBeatTimer.cancel();
         electionTimoutTimer.cancel();
