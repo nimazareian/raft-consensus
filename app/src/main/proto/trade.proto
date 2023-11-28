@@ -6,14 +6,39 @@ option java_package = "cs416.lambda.capstone";
 // TODO: Added for initial testing - remove
 service Trade {
   // Sends a greeting
-  rpc BuyStock (BuyRequest) returns (BuyReply) {}
+  rpc BuyStock (BuyRequest) returns (BuyReply);
+  rpc SellRequest (BuyRequest) returns (SellReply);
 }
 
 message BuyRequest {
   string stock = 1;
   int32 amount = 2;
+  int32 actBalance = 3;
 }
 
 message BuyReply {
   bool purchased = 1;
 }
+
+message SellRequest {
+  string stock = 1;
+  int32 amount = 2;
+}
+
+message SellReply {
+  int32 sell_amount = 1;
+}
+
+message GetStocksRequest {
+  //empty?
+}
+
+message StockData {
+  string tickr = 1;
+  int32 price = 2;
+}
+
+message GetStocksReply {
+  repeated StockData stockData = 1;
+}
+

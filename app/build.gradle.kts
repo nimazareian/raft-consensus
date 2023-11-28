@@ -74,6 +74,9 @@ dependencies {
     implementation("io.grpc:grpc-kotlin-stub:${grpcKotlinVersion}")
     implementation("io.grpc:grpc-protobuf:${grpcVersion}")
 
+    implementation("com.yahoofinance-api:YahooFinanceAPI:3.5.0")
+
+
     runtimeOnly("io.grpc:grpc-netty:${grpcVersion}")
 
     if (JavaVersion.current().isJava9Compatible) {

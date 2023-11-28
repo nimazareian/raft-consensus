@@ -2,6 +2,7 @@ package cs416.lambda.capstone
 
 import io.grpc.Server
 import io.grpc.ServerBuilder
+import yahoofinance.YahooFinance
 
 data class NodeConfig(val id: Int, val host: String, val port: Int)
 
@@ -17,10 +18,11 @@ class Server(
 ) {
     // RPC Sender
     // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port)});
+    private val nodes = ArrayList<StubNode>(nodeConfigs.map { n -> StubNode(n.host, n.port) });
 
     // Node for handling Raft state machine of this node
     private val node = Node(nodeId, nodes)
+    private val tradeServiceImpl = TradeServiceImpl()
 
     // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
@@ -31,7 +33,7 @@ class Server(
     // RPC Listener for trading with client
     private val tradingService: Server = ServerBuilder
         .forPort(clientPort)
-        .addService(TradeService())
+        .addService(TradeService(tradeServiceImpl))
         .build()
 
     fun start() {
@@ -56,13 +58,20 @@ class Server(
         raftService.awaitTermination()
     }
 
-    internal class TradeService : TradeGrpcKt.TradeCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyRequest) = buyReply {
-            println("Buy request received: $request")
-
-            // Response to client
-            purchased = false
+    internal class TradeService(private val tradeService: TradeServiceImpl) : TradeGrpcKt.TradeCoroutineImplBase() {
+        override suspend fun buyStock(request: BuyRequest): BuyReply {
+            return tradeService.buyStock(request)
         }
+        suspend fun sellStock(request: SellRequest): SellReply {
+            return tradeService.sellStock(request)
+        }
+
+        suspend fun getStocks(request: GetStocksRequest): GetStocksReply {
+            return tradeService.getStocks(request)
+        }
+
+
+
     }
 
     // Receive RPCs from other nodes and forward to Node implementation
