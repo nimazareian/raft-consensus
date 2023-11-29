@@ -172,17 +172,8 @@ class Node(
 
         // if we have already voted then wait for next election.
         // update our term so we are ready to vote
-        if (this.currentTerm < request.currentTerm && votedFor != null) {
-            votedFor = null
+        if (this.currentTerm < request.currentTerm) {
             stateMachine.transition(Event.NewTermDiscovered)
-            return response
-                .setCurrentTerm(currentTerm)
-                .setVoteGranted(false)
-                .build()
-                .also {
-                    logger.debug { "Discovered new term in request ${request.asShortInfoString()}, which exceeds current node term: ${this@Node.currentTerm}" }
-                    this.currentTerm = request.currentTerm
-                }
         }
 
         if (currentTerm <= request.currentTerm &&
