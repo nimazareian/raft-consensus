@@ -7,9 +7,7 @@ import cs416.lambda.capstone.state.initializeNodeState
 import cs416.lambda.capstone.util.ObserverFactory
 import cs416.lambda.capstone.util.asShortInfoString
 import io.github.oshai.kotlinlogging.KotlinLogging
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
-import java.lang.RuntimeException
 
 private val logger = KotlinLogging.logger {}
 
@@ -56,45 +54,9 @@ class Node(
 
 
     init {
-        val requestVoteResponseObserver = ObserverFactory.buildProtoObserver<VoteResponse>(mutex) { response ->
-            // Ignore vote responses if we are not a candidate
-            if (stateMachine.state == NodeState.Candidate) {
-                if (response.voteGranted && response.currentTerm == currentTerm) {
-                    logger.debug { "Received vote response back from node ${response.nodeId}" }
-                    votesReceived.add(response.nodeId)
-                    if (votesReceived.size > (nodes.size + 1) / 2.0) {
-                        logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
-                        stateMachine.transition(Event.ReceivedQuorum)
-                    }
-                } else {
-                    logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
-                }
+        val requestVoteResponseObserver = ObserverFactory.buildProtoObserver(mutex, handleVoteResponseCallback())
 
-                if (response.currentTerm > currentTerm) {
-                    logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
-                    currentTerm = response.currentTerm
-                    stateMachine.transition(Event.NewTermDiscovered)
-                }
-            } else {
-                logger.debug { "Received vote response back from node ${response.nodeId} but I am not a candidate" }
-            }
-            
-        }
-
-        val appendEntriesResponseStreamObserver =
-            ObserverFactory.buildProtoObserver<AppendEntriesResponse>(mutex) { response ->
-                logger.debug { "Received response back from node ${response.nodeId}" }
-                if (response.isSuccessful) {
-                    ackedLength[response.nodeId] = response.logAckLen
-                }
-
-                if (response.currentTerm > currentTerm) {
-                    logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-                    currentTerm = response.currentTerm
-                    stateMachine.transition(Event.NewTermDiscovered)
-                }
-
-            }
+        val appendEntriesResponseStreamObserver = ObserverFactory.buildProtoObserver(mutex, handleAppendEntriesResponseCallback())
 
         // List of RPC Senders
         // stub class for communicating with other nodes
@@ -156,9 +118,47 @@ class Node(
         this.logs = log
     }
 
-    // TODO: refactor this function by removing the inline object construction for voteResponse,
-    //  so that we don't need to specify this@ for when we need to use accessors
-    fun requestVote(request: VoteRequest): VoteResponse {
+    private fun handleAppendEntriesResponseCallback() = { response : AppendEntriesResponse ->
+        logger.debug { "Received response back from node ${response.nodeId}" }
+        if (response.isSuccessful) {
+            ackedLength[response.nodeId] = response.logAckLen
+        }
+
+        if (response.currentTerm > currentTerm) {
+            logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+            currentTerm = response.currentTerm
+            stateMachine.transition(Event.NewTermDiscovered)
+        }
+    }
+
+    private fun handleVoteResponseCallback() = { response : VoteResponse ->
+        // Ignore vote responses if we are not a candidate
+        if (stateMachine.state == NodeState.Candidate) {
+            if (response.voteGranted && response.currentTerm == currentTerm) {
+                logger.debug { "Received vote response back from node ${response.nodeId}" }
+                votesReceived.add(response.nodeId)
+                if (votesReceived.size > (nodes.size + 1) / 2.0) {
+                    logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
+                    stateMachine.transition(Event.ReceivedQuorum)
+                }
+            } else {
+                logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
+            }
+
+            if (response.currentTerm > currentTerm) {
+                logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
+                currentTerm = response.currentTerm
+                stateMachine.transition(Event.NewTermDiscovered)
+            }
+        } else {
+            logger.debug { "Received vote response back from node ${response.nodeId} but I am not a candidate" }
+        }
+    }
+
+    /**
+     * Process a VoteRequest
+     */
+    fun handleVoteRequest(request: VoteRequest): VoteResponse {
         val response = VoteResponse
             .newBuilder()
             .setNodeId(nodeId)
@@ -201,7 +201,10 @@ class Node(
 
     }
 
-    fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
+    /**
+     * Process a AppendEntriesRequest
+     */
+    fun handleAppendEntriesRequest(request: AppendEntriesRequest): AppendEntriesResponse {
         logger.debug { "Received: ${request.asShortInfoString()}" }
 
         // Reset the heartbeat timeout
@@ -324,15 +327,14 @@ class Node(
 
         logger.debug { "Starting election for term $currentTerm" }
 
-        // Asynchronously send heartbeats to all nodes and update the tracked state
+        // Asynchronously send vote requests to all nodes and update the tracked state
         nodes.map { n ->
             logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
-            val lastLogIndexForNode = n.nextIndex - 1
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
-                lastLogIndex = lastLogIndexForNode.toLong()
-                lastLogTerm = if (lastLogIndexForNode != -1) logs[lastLogIndexForNode]?.term ?: throw RuntimeException("WAT") else -1
+                lastLogIndex =  this@Node.logs.lastIndex().toLong()
+                lastLogTerm = (this@Node.logs.lastTerm() ?: -1).toLong()
             })
         }
     }
@@ -383,7 +385,7 @@ class Node(
     }
 
     override fun toString(): String {
-        return "Node(id='$nodeId', state=${stateMachine.state}, leader=$currentLeader currentTerm=$currentTerm)"
+        return "Node(id='$nodeId', state=${stateMachine.state}, leader=$currentLeader currentTerm=$currentTerm, votedFor=$votedFor)"
     }
 
     fun applyCommand(entry: LogEntry) {

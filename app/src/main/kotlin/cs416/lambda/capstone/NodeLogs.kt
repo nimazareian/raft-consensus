@@ -8,7 +8,8 @@ class NodeLogs {
     private var entries: MutableList<LogEntry> = mutableListOf()
 
     fun isNotEmpty(): Boolean = entries.isNotEmpty()
-    fun lastIndex() = entries.size - 1
+    fun lastIndex() = entries.lastIndex // returns -1 on empty
+    fun lastTerm(): Long? = entries.lastOrNull()?.term
 
     var commitIndex: Int = -1
         private set
