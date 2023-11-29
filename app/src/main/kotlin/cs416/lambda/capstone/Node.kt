@@ -2,8 +2,10 @@ package cs416.lambda.capstone
 
 import com.tinder.StateMachine
 import io.github.oshai.kotlinlogging.KotlinLogging
+import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 private val logger = KotlinLogging.logger {}
 
@@ -28,13 +30,8 @@ sealed class SideEffect {
 
 class Node(
     private val nodeId: Int,
-    private val nodes: ArrayList<StubNode>
+    nodeConfigs: List<NodeConfig>
 ) {
-    init {
-        logger.debug { "Node $nodeId created" }
-        logger.debug { "Known stub nodes include $nodes" }
-    }
-
     private var currentTerm: Long = 0;
     private var currentLeader: Int? = null;
     private var logs = NodeLogs();
@@ -103,6 +100,76 @@ class Node(
         }
     }
 
+    private val requestVoteResponseObserver: StreamObserver<VoteResponse> = object : StreamObserver<VoteResponse> {
+        override fun onNext(response: VoteResponse) {
+            runBlocking {
+                mutex.withLock {
+                    if (response.voteGranted && response.currentTerm == currentTerm) {
+                        logger.debug { "Received vote response back from node ${response.nodeId}" }
+                        votesReceived.add(response.nodeId);
+                        if (votesReceived.size > (nodes.size + 1) / 2.0) {
+                            logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
+                            stateMachine.transition(Event.ReceivedQuorum);
+                        }
+                    } else {
+                        logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
+                    }
+
+                    if (response.currentTerm > currentTerm) {
+                        logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
+                        currentTerm = response.currentTerm;
+                        stateMachine.transition(Event.NewTermDiscovered);
+                    }
+                }
+            }
+        }
+
+        override fun onError(t: Throwable) {
+            println("StubNode VoteResponse onError $t")
+        }
+
+        override fun onCompleted() {
+            println("StubNode VoteResponse onCompleted")
+        }
+    }
+
+    private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse> = object :
+        StreamObserver<AppendEntriesResponse> {
+        override fun onNext(response: AppendEntriesResponse) {
+            runBlocking {
+                mutex.withLock {
+                    logger.debug { "Received response back from node ${response.nodeId}" }
+                    if (response.isSuccessful) {
+                        ackedLength[response.nodeId] = response.logAckLen;
+                    }
+
+                    if (response.currentTerm > currentTerm) {
+                        logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+                        currentTerm = response.currentTerm;
+                        stateMachine.transition(Event.NewTermDiscovered);
+                    }
+                }
+            }
+        }
+
+        override fun onError(t: Throwable) {
+            println("StubNode AppendEntriesResponse onError $t")
+        }
+
+        override fun onCompleted() {
+            println("StubNode AppendEntriesResponse onCompleted")
+        }
+    }
+
+    // RPC Sender
+    // stub class for communicating with other nodes
+    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)});
+
+    init {
+        logger.debug { "Node $nodeId created" }
+        logger.debug { "Known stub nodes include $nodes" }
+    }
+
     /** Heartbeats setup **/
     // TODO: Whenever we stop using one timer to use another, we might
     //       have to cancel all previous timers
@@ -137,8 +204,8 @@ class Node(
         currentTerm: Long,
         votedFor: Int,
         log: NodeLogs,
-        nodes: ArrayList<StubNode>
-    ) : this(nodeId, nodes) {
+        nodeConfigs: List<NodeConfig>
+    ) : this(nodeId, nodeConfigs) {
         this.currentTerm = currentTerm;
         this.votedFor = votedFor;
         this.logs = log;
@@ -219,36 +286,16 @@ class Node(
         // Set up a timer for the next heartbeat
         sendHeartBeatTimer.resetTimer();
 
-
-        // TODO: Consider making this non blocking (could look into using coroutineScope)
-        // TODO: Will this block forever if a node is down?
-        runBlocking {
-            // Asynchronously send heartbeats to all nodes and update the tracked state
-            nodes.map { n ->
-                coroutineScope {
-                    launch {
-                        logger.debug { "Sending heartbeat to node ${n.address}:${n.port}" }
-                        val response = n.appendEntries(appendEntriesRequest {
-                            currentTerm = this@Node.currentTerm
-                            leaderId = this@Node.nodeId
-                            prevLogIndex = 0 // TODO: update these fields
-                            commitLength = 0 // TODO:
-                            // Ignoring entries
-                        })
-
-                        logger.debug { "Received response back from node ${n.address}:${n.port}" }
-                        if (response.isSuccessful) {
-                            ackedLength[response.nodeId] = response.logAckLen;
-                        }
-
-                        if (response.currentTerm > currentTerm) {
-                            logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-                            currentTerm = response.currentTerm;
-                            stateMachine.transition(Event.NewTermDiscovered);
-                        }
-                    }
-                }
-            }
+        // Asynchronously send heartbeats to all nodes and update the tracked state
+        nodes.map { n ->
+            logger.debug { "Sending heartbeat to node ${n.host}:${n.port}" }
+            n.appendEntries(appendEntriesRequest {
+                currentTerm = this@Node.currentTerm
+                leaderId = this@Node.nodeId
+                prevLogIndex = 0 // TODO: update these fields
+                commitLength = 0 // TODO:
+                // Ignoring entries
+            })
         }
     }
 
@@ -275,39 +322,18 @@ class Node(
 
         logger.debug { "Starting election for term $currentTerm" }
 
-        runBlocking {
-            // Asynchronously send heartbeats to all nodes and update the tracked state
-            logger.debug { "Mapping over nodes $nodes" }
-            nodes.map { n ->
-                logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
-                val response = n.requestVote(voteRequest {
-                    candidateId = this@Node.nodeId
-                    currentTerm = this@Node.currentTerm
-                    lastLogIndex = 0
-                    lastLogTerm = 0
-                });
-
-                if (response.voteGranted && response.currentTerm == currentTerm) {
-                    logger.debug { "Received vote response back from node ${n.address}:${n.port}" }
-                    votesReceived.add(response.nodeId);
-                    if (votesReceived.size > (nodes.size + 1) / 2.0) {
-                        logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
-                        stateMachine.transition(Event.ReceivedQuorum)
-                        return@runBlocking
-                    }
-                } else {
-                    logger.debug { "Received vote response back from node ${n.address}:${n.port} but it was not granted" }
-                }
-
-                if (response.currentTerm > currentTerm) {
-                    logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
-                    currentTerm = response.currentTerm;
-                    stateMachine.transition(Event.NewTermDiscovered)
-                }
-            }
+        // Asynchronously send heartbeats to all nodes and update the tracked state
+        logger.debug { "Mapping over nodes $nodes" }
+        nodes.map { n ->
+            logger.debug { "Requesting vote from node ${n.host}:${n.port}" }
+            n.requestVote(voteRequest {
+                candidateId = this@Node.nodeId
+                currentTerm = this@Node.currentTerm
+                lastLogIndex = 0
+                lastLogTerm = 0
+            });
         }
     }
-
 
     private fun electionTimeout() {
         stateMachine.transition(Event.ElectionTimeout)

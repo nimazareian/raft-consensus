@@ -17,12 +17,8 @@ class Server(
     private val clientPort: Int,
     nodeConfigs: List<NodeConfig>,
 ) {
-    // RPC Sender
-    // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map { n -> StubNode(n.address, n.port) })
-
     // Node for handling Raft state machine of this node
-    private val node = Node(nodeId, nodes)
+    private val node = Node(nodeId, nodeConfigs)
 
     // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
