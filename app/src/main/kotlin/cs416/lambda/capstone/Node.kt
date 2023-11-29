@@ -1,34 +1,17 @@
 package cs416.lambda.capstone
 
-import com.tinder.StateMachine
 import cs416.lambda.capstone.config.NodeConfig
+import cs416.lambda.capstone.state.Event
+import cs416.lambda.capstone.state.NodeState
+import cs416.lambda.capstone.state.initializeNodeState
+import cs416.lambda.capstone.util.ObserverFactory
 import cs416.lambda.capstone.util.asShortInfoString
 import io.github.oshai.kotlinlogging.KotlinLogging
-import io.grpc.stub.StreamObserver
-import kotlinx.coroutines.*
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import java.lang.RuntimeException
 
 private val logger = KotlinLogging.logger {}
-
-sealed class NodeState {
-    object Follower : NodeState()
-    object Candidate : NodeState()
-    object Leader : NodeState()
-}
-
-sealed class Event {
-    object LeaderFailureSuspected : Event()
-    object ReceivedQuorum : Event()
-    object NewTermDiscovered : Event()
-    object ElectionTimeout : Event()
-}
-
-sealed class SideEffect {
-    object StartElection : SideEffect()
-    object StartSendingHeartbeats : SideEffect()
-    object ListenForHeartbeats : SideEffect()
-}
 
 class Node(
     private val nodeId: Int,
@@ -74,7 +57,6 @@ class Node(
 
     init {
         val requestVoteResponseObserver = ObserverFactory.buildProtoObserver<VoteResponse>(mutex) { response ->
-            logger.debug { "RANNN" }
             runBlocking {
                 if (response.voteGranted && response.currentTerm == currentTerm) {
                     logger.debug { "Received vote response back from node ${response.nodeId}" }
@@ -121,9 +103,10 @@ class Node(
                         requestVoteResponseObserver,
                         appendEntriesResponseStreamObserver
                     )
-                })
+                }
+            )
         )
-        
+
         logger.debug { "Node $nodeId created" }
         logger.debug { "Known stub nodes include $nodes" }
     }
@@ -141,7 +124,7 @@ class Node(
     )
 
     // Used by Candidate during elections
-    private val electionTimoutTimer = ResettableTimer(
+    private val electionTimeoutTimer = ResettableTimer(
         callback = this::electionTimeout,
         delay = MIN_ELECTION_TIMEOUT_MS,
         startNow = false,
@@ -171,51 +154,60 @@ class Node(
 
     // TODO: refactor this function by removing the inline object construction for voteResponse,
     //  so that we don't need to specify this@ for when we need to use accessors
-    fun requestVote(request: VoteRequest) = voteResponse {
-        logger.debug { "Received: ${request.asShortInfoString()}" }
-        nodeId = this@Node.nodeId
+    fun requestVote(request: VoteRequest): VoteResponse {
+        val response = VoteResponse
+            .newBuilder()
+            .setNodeId(nodeId)
 
-        if (request.currentTerm > this@Node.currentTerm) {
-            logger.debug { "Discovered new term in request ${request.asShortInfoString()}, which exceeds current node term: ${this@Node.currentTerm}" }
-            votedFor = null
-            this@Node.currentTerm = request.currentTerm
-            stateMachine.transition(Event.NewTermDiscovered)
+        logger.debug { "Received: ${request.asShortInfoString()}" }
+
+        if (stateMachine.state != NodeState.Leader) {
+            logger.debug { "Resetting heartbeat timer" }
+            heartBeatTimeoutTimer.resetTimer()
         }
 
-        // Response to client
-        currentTerm = request.currentTerm
+        // if we have already voted then wait for next election.
+        // update our term so we are ready to vote
+        if (this.currentTerm < request.currentTerm && votedFor != null) {
+            votedFor = null
+            stateMachine.transition(Event.NewTermDiscovered)
+            return response
+                .setCurrentTerm(currentTerm)
+                .setVoteGranted(false)
+                .build()
+                .also {
+                    logger.debug { "Discovered new term in request ${request.asShortInfoString()}, which exceeds current node term: ${this@Node.currentTerm}" }
+                    this.currentTerm = request.currentTerm
+                }
+        }
 
-        if (request.currentTerm >= this@Node.currentTerm &&
+        if (currentTerm <= request.currentTerm &&
             (votedFor == null || votedFor == request.candidateId) &&
             request.lastLogIndex >= logs.commitIndex
         ) {
             // TODO: When do we reset votedFor
-            logger.debug { "Accepted vote request and voting for ${request.candidateId}" }
             votedFor = request.candidateId
-            voteGranted = true
+            return response
+                .setCurrentTerm(request.currentTerm)
+                .setVoteGranted(true)
+                .build()
+                .also {
+                    logger.debug { "Accepted vote request and voting for ${request.candidateId}" }
+                }
         } else {
-            logger.debug { "Denied vote request to ${request.candidateId} for term ${request.currentTerm} since I have already voted for $votedFor" }
-            voteGranted = false
+            return response
+                .setCurrentTerm(currentTerm)
+                .setVoteGranted(false)
+                .build()
+                .also {
+                    logger.debug { "Denied vote request to ${request.candidateId} for term ${request.currentTerm} since I have already voted for $votedFor" }
+                }
         }
+
     }
 
     fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
         logger.debug { "Received: ${request.asShortInfoString()}" }
-
-        if (request.currentTerm < this.currentTerm) return appendEntriesResponse { isSuccessful = false }
-            .also {
-                logger.debug { "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
-                }
-            }
-
-        if (request.currentTerm > this@Node.currentTerm) {
-            this.currentTerm = request.currentTerm
-            this@Node.votedFor = null
-            this@Node.currentLeader = request.leaderId
-            stateMachine.transition(Event.NewTermDiscovered)
-            // TODO potential bug as we are not replying. maybe reply with a response and then transition to follower.
-        }
-
 
         // Reset the heartbeat timeout
         if (stateMachine.state != NodeState.Leader) {
@@ -223,17 +215,69 @@ class Node(
             heartBeatTimeoutTimer.resetTimer()
         }
 
+        if (request.currentTerm < this.currentTerm)
+            return AppendEntriesResponse
+            .newBuilder()
+            .setIsSuccessful(false)
+            .build()
+            .also {
+                logger.debug {
+                    "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                }
+            }
+
+        // TODO maybe us greater or equal
+        if (currentTerm < request.currentTerm) {
+            currentTerm = request.currentTerm
+            votedFor = null
+            currentLeader = request.leaderId
+            stateMachine.transition(Event.NewTermDiscovered)
+        }
+
+        // check that prev log entry term of our state matches log entry term of request
+        if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
+            return AppendEntriesResponse
+                .newBuilder()
+                .setCurrentTerm(currentTerm)
+                .setIsSuccessful(false)
+                .build()
+                .also { logger.warn { "Leader is tweaking fr" } }
+        }
+
+        // initialize the start and end indexes that will get updated in this node's logs
+        val startIdx = request.prevLogIndex.toInt() + 1
+        val endIdx = startIdx + request.entriesCount
+
+        // loop through request entries and update the log
+        (startIdx..endIdx)
+            .toList()
+            .zip(request.entriesList)
+            .forEach { (idx, entry) ->
+                if (!logs.checkIndexTerm(idx, entry.term)) {
+                    logs.prune(idx)
+                }
+                logs[idx] = entry
+            }
+
+        currentLeader = request.leaderId
+        logs.commit(request.leaderCommitIndex.toInt())
+
+
         return appendEntriesResponse {
-            nodeId = this@Node.nodeId
+            nodeId = this.nodeId
             // Response to client
-            currentTerm = this@Node.currentTerm
-            isSuccessful = request.currentTerm <= this@Node.currentTerm
+            currentTerm = this.currentTerm
+            isSuccessful = true
 
             // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
             //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
+            //  -- step 2 [x] checked by the first checkIndexTerm (4th if statement) - das a lot of if statements hmm
+            //  -- step 3 [x] occurs by log pruning when updating entries
+            // rest of steps should also be done
 
             logAckLen = 0 // TODO
         }
+
     }
 
     private fun sendHeartbeat() {
@@ -265,7 +309,7 @@ class Node(
     private fun startElection() {
         // Cancel timers for other states
         heartBeatTimeoutTimer.cancel()
-        electionTimoutTimer.cancel()
+        electionTimeoutTimer.cancel()
 
         // Only send heartbeats if we are the leader
         if (stateMachine.state != NodeState.Candidate) {
@@ -281,7 +325,7 @@ class Node(
         currentTerm += 1
 
         // Start timer
-        electionTimoutTimer.resetTimer()
+        electionTimeoutTimer.resetTimer()
 
         logger.debug { "Starting election for term $currentTerm" }
 
@@ -289,20 +333,23 @@ class Node(
         logger.debug { "Mapping over nodes $nodes" }
         nodes.map { n ->
             logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
+            val lastLogIndexForNode = n.nextIndex - 1
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
-                lastLogIndex = 0
-                lastLogTerm = 0
+                lastLogIndex = lastLogIndexForNode.toLong()
+                lastLogTerm = if (lastLogIndexForNode != -1) logs[lastLogIndexForNode]?.term ?: throw RuntimeException("WAT") else -1
             })
         }
     }
 
     private fun electionTimeout() {
+        logger.debug { "Election timer timed out" }
         stateMachine.transition(Event.ElectionTimeout)
     }
 
     private fun heartBeatTimeout() {
+        logger.debug { "Heartbeat timer timed out" }
         stateMachine.transition(Event.LeaderFailureSuspected)
     }
 
@@ -311,7 +358,7 @@ class Node(
 
         // Cancel timers for previous states
         heartBeatTimeoutTimer.cancel()
-        electionTimoutTimer.cancel()
+        electionTimeoutTimer.cancel()
 
         sendHeartBeatTimer.resetTimer()
         sendHeartbeat()
@@ -322,20 +369,25 @@ class Node(
 
         // Cancel timers for other states
         sendHeartBeatTimer.cancel()
-        electionTimoutTimer.cancel()
+        electionTimeoutTimer.cancel()
 
         // Only listen for heartbeats if we are a follower
-        if (stateMachine.state == NodeState.Leader) {
+        if (stateMachine.state != NodeState.Leader) {
+            // Reset the heartbeat timeout
+            heartBeatTimeoutTimer.resetTimer()
+        } else {
             logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }
-            return
         }
 
-        // Reset the heartbeat timeout
-        heartBeatTimeoutTimer.resetTimer()
+
     }
 
     override fun toString(): String {
         return "Node(id='$nodeId', state=${stateMachine.state}, leader=$currentLeader currentTerm=$currentTerm)"
+    }
+
+    fun applyCommand(entry: LogEntry) {
+        logs.append(entry)
     }
 }
 

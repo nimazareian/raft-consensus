@@ -7,10 +7,19 @@ import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger { }
 
-class StubNode(val address: String, val port: Int, private val requestVoteResponseObserver: StreamObserver<VoteResponse>,
-               private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse>) : Closeable {
+class StubNode(
+    val address: String,
+    val port: Int,
+    private val requestVoteResponseObserver: StreamObserver<VoteResponse>,
+    private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse>
+) : Closeable {
     private val channel = ManagedChannelBuilder.forAddress(address, port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newStub(channel)
+
+    @Volatile
+    var nextIndex: Int = 0
+    @Volatile
+    var matchIndex: Int = -1
     init {
         // TODO: Should we wait till the channel is ready?
         // stub.withWaitForReady()
@@ -18,11 +27,11 @@ class StubNode(val address: String, val port: Int, private val requestVoteRespon
     }
 
     fun requestVote(request: VoteRequest) {
-        stub.requestVote(request, requestVoteResponseObserver);
+        stub.requestVote(request, requestVoteResponseObserver)
     }
 
     fun appendEntries(request: AppendEntriesRequest) {
-        stub.appendEntries(request, appendEntriesResponseStreamObserver);
+        stub.appendEntries(request, appendEntriesResponseStreamObserver)
     }
 
     override fun close() {

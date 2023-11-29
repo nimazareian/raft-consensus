@@ -16,7 +16,6 @@ class ObserverFactory {
         fun <T : GeneratedMessageV3> buildProtoObserver(mutex: Mutex, callbackFn: (T) -> Unit) =
             object : StreamObserver<T> {
                 override fun onNext(response: T) {
-                    logger.info { "Processing response" }
                     runBlocking {
                         mutex.withLock {
                             callbackFn(response)
