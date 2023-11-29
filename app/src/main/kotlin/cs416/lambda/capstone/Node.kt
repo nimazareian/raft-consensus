@@ -162,9 +162,11 @@ class Node(
         }
     }
 
-    // RPC Sender
+    // List of RPC Senders
     // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
+    private val nodes = ArrayList<StubNode>(nodeConfigs
+        .filter { n -> n.id != nodeId } // filter this node out
+        .map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
 
     init {
         logger.debug { "Node $nodeId created" }

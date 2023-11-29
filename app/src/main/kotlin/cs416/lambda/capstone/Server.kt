@@ -14,7 +14,7 @@ private val logger = KotlinLogging.logger {}
 class Server(
     private val nodeId: Int,
     private val serverPort: Int,
-    private val clientPort: Int,
+    clientPort: Int,
     nodeConfigs: List<NodeConfig>,
 ) {
     // Node for handling Raft state machine of this node
