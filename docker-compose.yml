@@ -9,7 +9,6 @@ services:
       - "4001:4000"
     environment:
       ID: "1"
-      PORT: "4000"
     build:
       dockerfile: Dockerfile
       context: .
@@ -24,7 +23,6 @@ services:
       - "4002:4000"
     environment:
       ID: "2"
-      PORT: "4000"
     build:
       dockerfile: Dockerfile
       context: .
@@ -39,7 +37,6 @@ services:
       - "4003:4000"
     environment:
       ID: "3"
-      PORT: "4000"
     build:
       dockerfile: Dockerfile
       context: .

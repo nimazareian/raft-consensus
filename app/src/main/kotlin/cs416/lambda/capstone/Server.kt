@@ -1,5 +1,6 @@
 package cs416.lambda.capstone
 
+import cs416.lambda.capstone.config.ClusterConfig
 import cs416.lambda.capstone.config.NodeConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Server
@@ -12,13 +13,23 @@ private val logger = KotlinLogging.logger {}
  * and passes messages to Raft Node for processing.
  */
 class Server(
-    private val nodeId: Int,
-    private val serverPort: Int,
+    private val config: ClusterConfig,
     clientPort: Int,
-    nodeConfigs: List<NodeConfig>,
 ) {
+    private val nodeId = runCatching { config.id.toInt() }
+        .getOrElse { throw IllegalArgumentException("invalid ID for node, and must be an Integer within 1024:69420") }
+
+    private val serverPort = config.cluster
+        .find { n -> n.id == nodeId }?.port ?: DEFAULT_SERVER_GRPC_PORT
+        .also {
+            logger.warn { "No port given for node, defaulting to $DEFAULT_SERVER_GRPC_PORT" }
+        }
+
+    private val configs: List<NodeConfig> = config.cluster
+        .filter { n -> n.id != nodeId } // filter this node out
+
     // Node for handling Raft state machine of this node
-    private val node = Node(nodeId, nodeConfigs)
+    private val node = Node(nodeId, configs)
 
     // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
@@ -37,6 +48,7 @@ class Server(
 //        println("Node $nodeId started, listening on $clientPort for client requests")
         raftService.start()
         logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
+        logger.debug { "Other nodes: $configs" }
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()

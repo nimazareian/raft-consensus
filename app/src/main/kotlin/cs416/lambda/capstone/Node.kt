@@ -2,6 +2,7 @@ package cs416.lambda.capstone
 
 import com.tinder.StateMachine
 import cs416.lambda.capstone.config.NodeConfig
+import cs416.lambda.capstone.util.asShortInfoString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.*
@@ -126,11 +127,11 @@ class Node(
         }
 
         override fun onError(t: Throwable) {
-            println("StubNode VoteResponse onError $t")
+            logger.error { "Error occurred proccessing StubNode VoteResponse: $t" }
         }
 
         override fun onCompleted() {
-            println("StubNode VoteResponse onCompleted")
+            logger.debug { "Finished processing StubNode VoteResponse" }
         }
     }
 
@@ -154,18 +155,17 @@ class Node(
         }
 
         override fun onError(t: Throwable) {
-            println("StubNode AppendEntriesResponse onError $t")
+            logger.error { "StubNode AppendEntriesResponse onError $t" }
         }
 
         override fun onCompleted() {
-            println("StubNode AppendEntriesResponse onCompleted")
+            logger.debug { "StubNode AppendEntriesResponse onCompleted" }
         }
     }
 
     // List of RPC Senders
     // stub class for communicating with other nodes
     private val nodes = ArrayList<StubNode>(nodeConfigs
-        .filter { n -> n.id != nodeId } // filter this node out
         .map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
 
     init {
@@ -214,12 +214,14 @@ class Node(
         this.logs = log
     }
 
+    // TODO: refactor this function by removing the inline object construction for voteResponse,
+    //  so that we don't need to specify this@ for when we need to use accessors
     fun requestVote(request: VoteRequest) = voteResponse {
-        logger.debug { "VoteRequest received: $request" }
+        logger.debug { "Received: ${request.asShortInfoString()}" }
         nodeId = this@Node.nodeId
 
         if (request.currentTerm > this@Node.currentTerm) {
-            logger.debug { "Discovered new term ${request.currentTerm} from VoteRequest from candidate ${request.candidateId}" }
+            logger.debug { "Discovered new term in request ${request.asShortInfoString()}, which exceeds current node term: ${this@Node.currentTerm}" }
             votedFor = null
             this@Node.currentTerm = request.currentTerm
             stateMachine.transition(Event.NewTermDiscovered)
@@ -243,10 +245,13 @@ class Node(
     }
 
     fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
-        logger.debug { "AppendRequest received: $request from leader ${request.leaderId}" }
+        logger.debug { "Received: ${request.asShortInfoString()}" }
 
         if (request.currentTerm < this.currentTerm) return appendEntriesResponse { isSuccessful = false }
-            .also { logger.debug { "AppendRequest term exceeds this node's term, replying with error response" } }
+            .also {
+                logger.debug { "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                }
+            }
 
         if (request.currentTerm > this@Node.currentTerm) {
             this.currentTerm = request.currentTerm
@@ -378,3 +383,5 @@ class Node(
         return "Node(id='$nodeId', state=${stateMachine.state}, leader=$currentLeader currentTerm=$currentTerm)"
     }
 }
+
+

@@ -1,6 +1,5 @@
 {
   "id": "${ID}",
-  "port": "${PORT}",
   "cluster": [
     {
       "id": 1,
