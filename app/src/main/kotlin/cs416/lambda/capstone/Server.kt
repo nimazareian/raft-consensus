@@ -17,7 +17,7 @@ class Server(
     clientPort: Int,
 ) {
     private val nodeId = runCatching { config.id.toInt() }
-        .getOrElse { throw IllegalArgumentException("invalid ID for node, and must be an Integer within 1024:69420") }
+        .getOrElse { throw IllegalArgumentException("invalid ID for node, and must be an Integer within 0 and the max number of nodes") }
 
     private val serverPort = config.cluster
         .find { n -> n.id == nodeId }?.port ?: DEFAULT_SERVER_GRPC_PORT
@@ -45,14 +45,14 @@ class Server(
 
     fun start() {
 //        tradingService.start()
-//        println("Node $nodeId started, listening on $clientPort for client requests")
+//        logger.debug { "Node $nodeId started, listening on $clientPort for client requests" }
         raftService.start()
         logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
         logger.debug { "Other nodes: $configs" }
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
-                println("Node $nodeId stopped listening on port $serverPort")
+                logger.warn { "Node $nodeId stopped listening on port $serverPort" }
             }
         )
     }
@@ -60,6 +60,7 @@ class Server(
     private fun stop() {
 //        tradingService.shutdown()
         raftService.shutdown()
+        node.close()
     }
 
     fun blockUntilShutdown() {
@@ -69,7 +70,7 @@ class Server(
 
     internal class TradeService : TradeGrpcKt.TradeCoroutineImplBase() {
         override suspend fun buyStock(request: BuyRequest) = buyReply {
-            println("Buy request received: $request")
+            logger.debug { "Buy request received: $request" }
 
             // Response to client
             purchased = false

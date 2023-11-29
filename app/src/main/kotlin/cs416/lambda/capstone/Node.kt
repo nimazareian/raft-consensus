@@ -11,6 +11,9 @@ import kotlinx.coroutines.sync.withLock
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Classes used to represent the States, Events, and SideEffects of the Raft state machine
+ */
 sealed class NodeState {
     object Follower : NodeState()
     object Candidate : NodeState()
@@ -106,6 +109,12 @@ class Node(
         override fun onNext(response: VoteResponse) {
             runBlocking {
                 mutex.withLock {
+                    // Ignore vote responses if we are not a candidate
+                    if (stateMachine.state != NodeState.Candidate) {
+                        logger.debug { "Received vote response back from node ${response.nodeId} but I am not a candidate" }
+                        return@withLock
+                    }
+
                     if (response.voteGranted && response.currentTerm == currentTerm) {
                         logger.debug { "Received vote response back from node ${response.nodeId}" }
                         votesReceived.add(response.nodeId)
@@ -127,15 +136,15 @@ class Node(
         }
 
         override fun onError(t: Throwable) {
-            logger.error { "Error occurred proccessing StubNode VoteResponse: $t" }
+            logger.error { "Error occurred processing StubNode VoteResponse: $t" }
         }
 
         override fun onCompleted() {
-            logger.debug { "Finished processing StubNode VoteResponse" }
+            logger.debug { "Communication completed with StubNode VoteResponse" }
         }
     }
 
-    private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse> = object :
+    private val appendEntriesResponseObserver: StreamObserver<AppendEntriesResponse> = object :
         StreamObserver<AppendEntriesResponse> {
         override fun onNext(response: AppendEntriesResponse) {
             runBlocking {
@@ -155,18 +164,18 @@ class Node(
         }
 
         override fun onError(t: Throwable) {
-            logger.error { "Error occurred proccessing StubNode AppendEntriesResponse: $t" }
+            logger.error { "Error occurred processing StubNode AppendEntriesResponse: $t" }
         }
 
         override fun onCompleted() {
-            logger.debug { "Finished processing StubNode AppendEntriesResponse" }
+            logger.debug { "Communication completed with StubNode AppendEntriesResponse" }
         }
     }
 
     // List of RPC Senders
     // stub class for communicating with other nodes
     private val nodes = ArrayList<StubNode>(nodeConfigs
-        .map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
+        .map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseObserver)})
 
     init {
         logger.debug { "Node $nodeId created" }
@@ -180,9 +189,9 @@ class Node(
     // Used by Follower to detect leader failure
     private val heartBeatTimeoutTimer = ResettableTimer(
         callback = this::heartBeatTimeout,
-        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
+        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
         startNow = true,
-        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
+        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
     )
 
     // Used by Candidate during elections
@@ -247,7 +256,12 @@ class Node(
     fun appendEntries(request: AppendEntriesRequest): AppendEntriesResponse {
         logger.debug { "Received: ${request.asShortInfoString()}" }
 
-        if (request.currentTerm < this.currentTerm) return appendEntriesResponse { isSuccessful = false }
+        if (request.currentTerm < this.currentTerm) return appendEntriesResponse {
+            // TODO: Include log_ack_len
+            nodeId = this@Node.nodeId
+            currentTerm = this@Node.currentTerm
+            isSuccessful = false
+        }
             .also {
                 logger.debug { "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
                 }
@@ -260,7 +274,6 @@ class Node(
             stateMachine.transition(Event.NewTermDiscovered)
             // TODO potential bug as we are not replying. maybe reply with a response and then transition to follower.
         }
-
 
         // Reset the heartbeat timeout
         if (stateMachine.state != NodeState.Leader) {
@@ -331,12 +344,12 @@ class Node(
         logger.debug { "Starting election for term $currentTerm" }
 
         // Asynchronously send heartbeats to all nodes and update the tracked state
-        logger.debug { "Mapping over nodes $nodes" }
         nodes.map { n ->
             logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
+                // TODO: update these fields
                 lastLogIndex = 0
                 lastLogTerm = 0
             })
@@ -358,6 +371,8 @@ class Node(
         heartBeatTimeoutTimer.cancel()
         electionTimoutTimer.cancel()
 
+        // Send a heartbeat immediately and restart the timer
+        // to send heartbeats periodically
         sendHeartBeatTimer.resetTimer()
         sendHeartbeat()
     }
@@ -377,6 +392,10 @@ class Node(
 
         // Reset the heartbeat timeout
         heartBeatTimeoutTimer.resetTimer()
+    }
+
+    fun close() {
+        nodes.forEach { n -> n.close() }
     }
 
     override fun toString(): String {
