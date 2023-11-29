@@ -6,6 +6,9 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 
 private val logger = KotlinLogging.logger {}
 
+/**
+ * Classes used to represent the States, Events, and SideEffects of the Raft state machine
+ */
 sealed class NodeState {
     object Follower : NodeState()
     object Candidate : NodeState()
