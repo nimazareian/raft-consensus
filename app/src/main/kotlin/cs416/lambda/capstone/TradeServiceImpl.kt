@@ -29,6 +29,7 @@ class TradeServiceImpl {
     }
     fun getStocks(request: GetStocksRequest): GetStocksReply {
         //TODO: DO SOMETHING
+        
         return GetStocksReply.newBuilder().build()
     }
 

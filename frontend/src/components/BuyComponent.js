@@ -45,7 +45,7 @@ const BuyComponent = () => {
             {/*DEPENDING ON WHERE WE GO WITH THIS REMOVE SUBTOTAL?*/}
             {/*<h2>Subtotal: {subTotal} </h2> */}
             <ButtonWrapper>
-                <Button onClick={onSubmit} variant="primary"> Submit </Button>
+                <Button onClick={onSubmit} variant="primary" size="lg"> Submit </Button>
             </ButtonWrapper>
         </BuyWrapper>
     );

@@ -8,6 +8,7 @@ service Trade {
   // Sends a greeting
   rpc BuyStock (BuyRequest) returns (BuyReply);
   rpc SellRequest (BuyRequest) returns (SellReply);
+  rpc GetStocks(GetStocksRequest) returns (GetStocksReply);
 }
 
 message BuyRequest {

@@ -2,6 +2,7 @@ import React, {useEffect, useState} from 'react';
 import Button from 'react-bootstrap/Button';
 import styled from "styled-components";
 import {RowWrapper} from "./SellComponent";
+import {Form} from "react-bootstrap";
 const AccountWrapper = styled.div`
   padding: 1.5rem;
   border: 2px solid grey;
@@ -9,14 +10,23 @@ const AccountWrapper = styled.div`
   grid-column: span 2;
 `
 const AccountComponent = () => {
-    function stubFunction() {
-        console.log("enter submit code here...")
+    const [accountBalance, setAccountBalance] = useState(0);
+    const [depositAmount, setDepositAmount] = useState(0);
+    const updateBalance = () => {
+        setAccountBalance(accountBalance + depositAmount);
+    }
+
+    const updateDepositAmount = (e) => {
+        e.preventDefault();
+        setDepositAmount(parseInt(e.target.value));
     }
 
     return (
         <AccountWrapper>
-            <h1>Account Balance:</h1>
-            <Button onClick={stubFunction} variant="primary"> Add Funds </Button>
+            <h1>Account Balance: {accountBalance}</h1>
+                <Form.Label>Enter Amount to Deposit:</Form.Label>
+                <Form.Control onChange={updateDepositAmount} name="amt" type="number" required/>
+                <Button size="lg" onClick={updateBalance} variant="primary"> Add Funds </Button>
         </AccountWrapper>
     );
 };
