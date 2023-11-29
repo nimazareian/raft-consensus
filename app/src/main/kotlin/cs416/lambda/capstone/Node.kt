@@ -155,11 +155,11 @@ class Node(
         }
 
         override fun onError(t: Throwable) {
-            logger.error { "StubNode AppendEntriesResponse onError $t" }
+            logger.error { "Error occurred proccessing StubNode AppendEntriesResponse: $t" }
         }
 
         override fun onCompleted() {
-            logger.debug { "StubNode AppendEntriesResponse onCompleted" }
+            logger.debug { "Finished processing StubNode AppendEntriesResponse" }
         }
     }
 
