@@ -100,12 +100,7 @@ class Node(
     }
 
     private val requestVoteResponseObserver: StreamObserver<VoteResponse> = object : StreamObserver<VoteResponse> {
-        override fun onNext(response: VoteResponse?) {
-            if (response == null) {
-                logger.warn { "Received null VoteResponse" }
-                return;
-            }
-
+        override fun onNext(response: VoteResponse) {
             runBlocking {
                 mutex.withLock {
                     if (response.voteGranted && response.currentTerm == currentTerm) {
@@ -128,7 +123,7 @@ class Node(
             }
         }
 
-        override fun onError(t: Throwable?) {
+        override fun onError(t: Throwable) {
             println("StubNode VoteResponse onError $t")
         }
 
@@ -139,12 +134,7 @@ class Node(
 
     private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse> = object :
         StreamObserver<AppendEntriesResponse> {
-        override fun onNext(response: AppendEntriesResponse?) {
-            if (response == null) {
-                logger.warn { "Received null AppendEntriesResponse" }
-                return;
-            }
-
+        override fun onNext(response: AppendEntriesResponse) {
             runBlocking {
                 mutex.withLock {
                     logger.debug { "Received response back from node ${response.nodeId}" }
@@ -161,7 +151,7 @@ class Node(
             }
         }
 
-        override fun onError(t: Throwable?) {
+        override fun onError(t: Throwable) {
             println("StubNode AppendEntriesResponse onError $t")
         }
 
