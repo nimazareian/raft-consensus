@@ -57,7 +57,8 @@ class Node(
 
     init {
         val requestVoteResponseObserver = ObserverFactory.buildProtoObserver<VoteResponse>(mutex) { response ->
-            runBlocking {
+            // Ignore vote responses if we are not a candidate
+            if (stateMachine.state == NodeState.Candidate) {
                 if (response.voteGranted && response.currentTerm == currentTerm) {
                     logger.debug { "Received vote response back from node ${response.nodeId}" }
                     votesReceived.add(response.nodeId)
@@ -74,7 +75,10 @@ class Node(
                     currentTerm = response.currentTerm
                     stateMachine.transition(Event.NewTermDiscovered)
                 }
+            } else {
+                logger.debug { "Received vote response back from node ${response.nodeId} but I am not a candidate" }
             }
+            
         }
 
         val appendEntriesResponseStreamObserver =
@@ -118,9 +122,9 @@ class Node(
     // Used by Follower to detect leader failure
     private val heartBeatTimeoutTimer = ResettableTimer(
         callback = this::heartBeatTimeout,
-        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
+        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
         startNow = true,
-        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * 1000L,
+        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
     )
 
     // Used by Candidate during elections
@@ -216,6 +220,7 @@ class Node(
         }
 
         if (request.currentTerm < this.currentTerm)
+            // TODO: Include log_ack_len, missing fields
             return AppendEntriesResponse
             .newBuilder()
             .setIsSuccessful(false)
@@ -277,7 +282,6 @@ class Node(
 
             logAckLen = 0 // TODO
         }
-
     }
 
     private fun sendHeartbeat() {
@@ -330,7 +334,6 @@ class Node(
         logger.debug { "Starting election for term $currentTerm" }
 
         // Asynchronously send heartbeats to all nodes and update the tracked state
-        logger.debug { "Mapping over nodes $nodes" }
         nodes.map { n ->
             logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
             val lastLogIndexForNode = n.nextIndex - 1
@@ -360,6 +363,8 @@ class Node(
         heartBeatTimeoutTimer.cancel()
         electionTimeoutTimer.cancel()
 
+        // Send a heartbeat immediately and restart the timer
+        // to send heartbeats periodically
         sendHeartBeatTimer.resetTimer()
         sendHeartbeat()
     }
@@ -380,6 +385,10 @@ class Node(
         }
 
 
+    }
+
+    fun close() {
+        nodes.forEach { n -> n.close() }
     }
 
     override fun toString(): String {

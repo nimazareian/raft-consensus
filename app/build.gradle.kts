@@ -2,22 +2,16 @@ import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.google.protobuf.gradle.*
 
-/**
- * Protobuf and gRPC Installation was inspired from
- * https://github.com/google/protobuf-gradle-plugin/blob/master/examples/exampleKotlinDslProject/build.gradle.kts
- */
-
 val grpcVersion = "1.57.2"
 val grpcKotlinVersion = "1.4.0"
 val protobufVersion = "3.24.1"
 
 plugins {
-    // for building a fatty jar
+    // For building a jar
     id("com.github.johnrengelman.shadow") version "8.1.1"
 
     // Apply the org.jetbrains.kotlin.jvm Plugin to add support for Kotlin.
     id("org.jetbrains.kotlin.jvm") version "1.9.10"
-
 
     id("com.google.protobuf") version "0.8.19"
 
@@ -27,9 +21,7 @@ plugins {
 
 application {
     // Configure which main class should be run. This should be added to your gradle
-    // run configuration
-    // E.g. Running Server for node 3: `run -Plaunch=Server --args="--nodeId 3"`
-    // E.g. Running Client: `run -Plaunch=Client`
+    // run configuration. E.g. `run -Plaunch=Server` or `run -Plaunch=Client`
     if (hasProperty("launch")) {
         mainClass.set("cs416.lambda.capstone.${property("launch")}MainKt")
     } else {
@@ -77,6 +69,7 @@ dependencies {
     implementation("ch.qos.logback:logback-classic:1.4.11")
     implementation("io.github.oshai:kotlin-logging-jvm:5.1.0")
 
+    // Protobuf and gRPC
     implementation("com.google.protobuf:protobuf-java:${protobufVersion}")
     implementation("com.google.protobuf:protobuf-kotlin:${protobufVersion}")
     implementation("io.grpc:grpc-stub:${grpcVersion}")
