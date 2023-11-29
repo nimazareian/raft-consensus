@@ -23,7 +23,7 @@ fun main(args: Array<String>) {
         ?.let { Path(it) }
         ?: Path(DEFAULT_CONFIG_PATH)
             .also { logger.warn { "No config flag given, using default [$it]" } }
-    logger.info { configPath }
+
     val config = ConfigLoaderBuilder
         .default()
         .addDefaultParsers()
@@ -36,7 +36,6 @@ fun main(args: Array<String>) {
     val nodeId = runCatching { config.id.toInt() }
         .getOrElse { throw IllegalArgumentException("ID environment variable needs to be set, and must be an Integer within 1024:69420") }
     val serverPort = runCatching { config.port.toInt() }.getOrElse { DEFAULT_SERVER_GRPC_PORT.toInt() }
-
 
     val configs: List<NodeConfig> = config.cluster
 

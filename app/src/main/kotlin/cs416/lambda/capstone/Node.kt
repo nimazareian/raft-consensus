@@ -1,6 +1,7 @@
 package cs416.lambda.capstone
 
 import com.tinder.StateMachine
+import cs416.lambda.capstone.config.NodeConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.*
@@ -32,34 +33,34 @@ class Node(
     private val nodeId: Int,
     nodeConfigs: List<NodeConfig>
 ) {
-    private var currentTerm: Long = 0;
-    private var currentLeader: Int? = null;
-    private var logs = NodeLogs();
+    private var currentTerm: Long = 0
+    private var currentLeader: Int? = null
+    private var logs = NodeLogs()
 
     // How many log entries since the start have we committed
     // TODO: Can we remove this and read it from NodeLog?
-    private var commitLength: Long = 0;
+    private var commitLength: Long = 0
 
     /**
      * Fields used for leader election
      */
-    private var votesReceived = mutableSetOf<Int>();
+    private var votesReceived = mutableSetOf<Int>()
 
     // The node that we voted for in the *current term*
-    private var votedFor: Int? = null;
+    private var votedFor: Int? = null
 
     /**
      * Fields used by the Leader node
      */
 
     // Map of node ID to the number of log entries we have sent to a follower
-    private var sentLength = mutableMapOf<Int, Long>();
+    private var sentLength = mutableMapOf<Int, Long>()
 
     // Map of node ID to the number of log entries that a follower has acknowledged
     // to have received
-    private var ackedLength = mutableMapOf<Int, Long>();
+    private var ackedLength = mutableMapOf<Int, Long>()
 
-    private val mutex = Mutex();
+    private val mutex = Mutex()
 
     private val stateMachine = StateMachine.create<NodeState, Event, SideEffect> {
         // Start in the follower state
@@ -106,10 +107,10 @@ class Node(
                 mutex.withLock {
                     if (response.voteGranted && response.currentTerm == currentTerm) {
                         logger.debug { "Received vote response back from node ${response.nodeId}" }
-                        votesReceived.add(response.nodeId);
+                        votesReceived.add(response.nodeId)
                         if (votesReceived.size > (nodes.size + 1) / 2.0) {
                             logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
-                            stateMachine.transition(Event.ReceivedQuorum);
+                            stateMachine.transition(Event.ReceivedQuorum)
                         }
                     } else {
                         logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
@@ -117,8 +118,8 @@ class Node(
 
                     if (response.currentTerm > currentTerm) {
                         logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
-                        currentTerm = response.currentTerm;
-                        stateMachine.transition(Event.NewTermDiscovered);
+                        currentTerm = response.currentTerm
+                        stateMachine.transition(Event.NewTermDiscovered)
                     }
                 }
             }
@@ -140,13 +141,13 @@ class Node(
                 mutex.withLock {
                     logger.debug { "Received response back from node ${response.nodeId}" }
                     if (response.isSuccessful) {
-                        ackedLength[response.nodeId] = response.logAckLen;
+                        ackedLength[response.nodeId] = response.logAckLen
                     }
 
                     if (response.currentTerm > currentTerm) {
                         logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-                        currentTerm = response.currentTerm;
-                        stateMachine.transition(Event.NewTermDiscovered);
+                        currentTerm = response.currentTerm
+                        stateMachine.transition(Event.NewTermDiscovered)
                     }
                 }
             }
@@ -163,7 +164,7 @@ class Node(
 
     // RPC Sender
     // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.host, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)});
+    private val nodes = ArrayList<StubNode>(nodeConfigs.map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
 
     init {
         logger.debug { "Node $nodeId created" }
@@ -206,9 +207,9 @@ class Node(
         log: NodeLogs,
         nodeConfigs: List<NodeConfig>
     ) : this(nodeId, nodeConfigs) {
-        this.currentTerm = currentTerm;
-        this.votedFor = votedFor;
-        this.logs = log;
+        this.currentTerm = currentTerm
+        this.votedFor = votedFor
+        this.logs = log
     }
 
     fun requestVote(request: VoteRequest) = voteResponse {
@@ -218,8 +219,8 @@ class Node(
         if (request.currentTerm > this@Node.currentTerm) {
             logger.debug { "Discovered new term ${request.currentTerm} from VoteRequest from candidate ${request.candidateId}" }
             votedFor = null
-            this@Node.currentTerm = request.currentTerm;
-            stateMachine.transition(Event.NewTermDiscovered);
+            this@Node.currentTerm = request.currentTerm
+            stateMachine.transition(Event.NewTermDiscovered)
         }
 
         // Response to client
@@ -277,18 +278,18 @@ class Node(
         // Only send heartbeats if we are the leader
         if (stateMachine.state != NodeState.Leader) {
             logger.warn { "Trying to send heartbeat while in state ${stateMachine.state}" }
-            return;
+            return
         }
         logger.debug { "Broadcasting heartbeats to $nodes" }
 
         // TODO: Note that doing the timer like this could result in the heartbeats
         //       not be the exact same duration apart.
         // Set up a timer for the next heartbeat
-        sendHeartBeatTimer.resetTimer();
+        sendHeartBeatTimer.resetTimer()
 
         // Asynchronously send heartbeats to all nodes and update the tracked state
         nodes.map { n ->
-            logger.debug { "Sending heartbeat to node ${n.host}:${n.port}" }
+            logger.debug { "Sending heartbeat to node ${n.address}:${n.port}" }
             n.appendEntries(appendEntriesRequest {
                 currentTerm = this@Node.currentTerm
                 leaderId = this@Node.nodeId
@@ -301,37 +302,37 @@ class Node(
 
     private fun startElection() {
         // Cancel timers for other states
-        heartBeatTimeoutTimer.cancel();
-        electionTimoutTimer.cancel();
+        heartBeatTimeoutTimer.cancel()
+        electionTimoutTimer.cancel()
 
         // Only send heartbeats if we are the leader
         if (stateMachine.state != NodeState.Candidate) {
             logger.warn { "Trying to start an election while in state ${stateMachine.state}" }
-            return;
+            return
         }
 
         // Reset votes (we vote for ourself by default)
-        votesReceived = mutableSetOf(nodeId);
-        votedFor = nodeId;
+        votesReceived = mutableSetOf(nodeId)
+        votedFor = nodeId
 
         // Increment term
         currentTerm += 1
 
         // Start timer
-        electionTimoutTimer.resetTimer();
+        electionTimoutTimer.resetTimer()
 
         logger.debug { "Starting election for term $currentTerm" }
 
         // Asynchronously send heartbeats to all nodes and update the tracked state
         logger.debug { "Mapping over nodes $nodes" }
         nodes.map { n ->
-            logger.debug { "Requesting vote from node ${n.host}:${n.port}" }
+            logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
                 lastLogIndex = 0
                 lastLogTerm = 0
-            });
+            })
         }
     }
 
@@ -347,28 +348,28 @@ class Node(
         logger.debug { "Starting to send heartbeats" }
 
         // Cancel timers for previous states
-        heartBeatTimeoutTimer.cancel();
-        electionTimoutTimer.cancel();
+        heartBeatTimeoutTimer.cancel()
+        electionTimoutTimer.cancel()
 
-        sendHeartBeatTimer.resetTimer();
-        sendHeartbeat();
+        sendHeartBeatTimer.resetTimer()
+        sendHeartbeat()
     }
 
     private fun listenForHeartbeats() {
         logger.debug { "Listening for Heartbeats" }
 
         // Cancel timers for other states
-        sendHeartBeatTimer.cancel();
-        electionTimoutTimer.cancel();
+        sendHeartBeatTimer.cancel()
+        electionTimoutTimer.cancel()
 
         // Only listen for heartbeats if we are a follower
         if (stateMachine.state == NodeState.Leader) {
             logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }
-            return;
+            return
         }
 
         // Reset the heartbeat timeout
-        heartBeatTimeoutTimer.resetTimer();
+        heartBeatTimeoutTimer.resetTimer()
     }
 
     override fun toString(): String {
