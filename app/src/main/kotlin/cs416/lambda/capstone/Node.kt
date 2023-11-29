@@ -63,112 +63,67 @@ class Node(
 
     private val mutex = Mutex()
 
-    private val stateMachine = StateMachine.create<NodeState, Event, SideEffect> {
-        // Start in the follower state
-        initialState(NodeState.Follower)
+    private val stateMachine = initializeNodeState(
+        ::startElection,
+        ::startSendingHeartBeats,
+        ::listenForHeartbeats
+    )
 
-        state<NodeState.Follower> {
-            on<Event.LeaderFailureSuspected> {
-                transitionTo(NodeState.Candidate, SideEffect.StartElection)
-            }
-        }
+    private val nodes: ArrayList<StubNode> = arrayListOf()
 
-        state<NodeState.Candidate> {
-            on<Event.ReceivedQuorum> {
-                transitionTo(NodeState.Leader, SideEffect.StartSendingHeartbeats)
-            }
-            on<Event.NewTermDiscovered> {
-                transitionTo(NodeState.Follower, SideEffect.ListenForHeartbeats)
-            }
-            on<Event.ElectionTimeout> {
-                transitionTo(NodeState.Candidate, SideEffect.StartElection)
-            }
-        }
-
-        state<NodeState.Leader> {
-            on<Event.NewTermDiscovered> {
-                transitionTo(NodeState.Follower, SideEffect.ListenForHeartbeats)
-            }
-        }
-
-        onTransition {
-            val validTransition = it as? StateMachine.Transition.Valid ?: return@onTransition
-            when (validTransition.sideEffect) {
-                SideEffect.StartElection -> startElection()
-                SideEffect.StartSendingHeartbeats -> startSendingHeartBeats()
-                SideEffect.ListenForHeartbeats -> listenForHeartbeats()
-                null -> logger.debug { "No side effect" }
-            }
-        }
-    }
-
-    private val requestVoteResponseObserver: StreamObserver<VoteResponse> = object : StreamObserver<VoteResponse> {
-        override fun onNext(response: VoteResponse) {
-            runBlocking {
-                mutex.withLock {
-                    if (response.voteGranted && response.currentTerm == currentTerm) {
-                        logger.debug { "Received vote response back from node ${response.nodeId}" }
-                        votesReceived.add(response.nodeId)
-                        if (votesReceived.size > (nodes.size + 1) / 2.0) {
-                            logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
-                            stateMachine.transition(Event.ReceivedQuorum)
-                        }
-                    } else {
-                        logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
-                    }
-
-                    if (response.currentTerm > currentTerm) {
-                        logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
-                        currentTerm = response.currentTerm
-                        stateMachine.transition(Event.NewTermDiscovered)
-                    }
-                }
-            }
-        }
-
-        override fun onError(t: Throwable) {
-            logger.error { "Error occurred proccessing StubNode VoteResponse: $t" }
-        }
-
-        override fun onCompleted() {
-            logger.debug { "Finished processing StubNode VoteResponse" }
-        }
-    }
-
-    private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse> = object :
-        StreamObserver<AppendEntriesResponse> {
-        override fun onNext(response: AppendEntriesResponse) {
-            runBlocking {
-                mutex.withLock {
-                    logger.debug { "Received response back from node ${response.nodeId}" }
-                    if (response.isSuccessful) {
-                        ackedLength[response.nodeId] = response.logAckLen
-                    }
-
-                    if (response.currentTerm > currentTerm) {
-                        logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-                        currentTerm = response.currentTerm
-                        stateMachine.transition(Event.NewTermDiscovered)
-                    }
-                }
-            }
-        }
-
-        override fun onError(t: Throwable) {
-            logger.error { "Error occurred proccessing StubNode AppendEntriesResponse: $t" }
-        }
-
-        override fun onCompleted() {
-            logger.debug { "Finished processing StubNode AppendEntriesResponse" }
-        }
-    }
-
-    // List of RPC Senders
-    // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs
-        .map{n -> StubNode(n.address, n.port, requestVoteResponseObserver, appendEntriesResponseStreamObserver)})
 
     init {
+        val requestVoteResponseObserver = ObserverFactory.buildProtoObserver<VoteResponse>(mutex) { response ->
+            logger.debug { "RANNN" }
+            runBlocking {
+                if (response.voteGranted && response.currentTerm == currentTerm) {
+                    logger.debug { "Received vote response back from node ${response.nodeId}" }
+                    votesReceived.add(response.nodeId)
+                    if (votesReceived.size > (nodes.size + 1) / 2.0) {
+                        logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
+                        stateMachine.transition(Event.ReceivedQuorum)
+                    }
+                } else {
+                    logger.debug { "Received vote response back from node ${response.nodeId} but it was not granted" }
+                }
+
+                if (response.currentTerm > currentTerm) {
+                    logger.debug { "Discovered new term ${response.currentTerm} from VoteResponse from node ${response.nodeId}" }
+                    currentTerm = response.currentTerm
+                    stateMachine.transition(Event.NewTermDiscovered)
+                }
+            }
+        }
+
+        val appendEntriesResponseStreamObserver =
+            ObserverFactory.buildProtoObserver<AppendEntriesResponse>(mutex) { response ->
+                logger.debug { "Received response back from node ${response.nodeId}" }
+                if (response.isSuccessful) {
+                    ackedLength[response.nodeId] = response.logAckLen
+                }
+
+                if (response.currentTerm > currentTerm) {
+                    logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+                    currentTerm = response.currentTerm
+                    stateMachine.transition(Event.NewTermDiscovered)
+                }
+
+            }
+
+        // List of RPC Senders
+        // stub class for communicating with other nodes
+        nodes.addAll(
+            ArrayList(nodeConfigs
+                .map { n ->
+                    StubNode(
+                        n.address,
+                        n.port,
+                        requestVoteResponseObserver,
+                        appendEntriesResponseStreamObserver
+                    )
+                })
+        )
+        
         logger.debug { "Node $nodeId created" }
         logger.debug { "Known stub nodes include $nodes" }
     }
