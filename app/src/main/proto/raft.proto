@@ -64,6 +64,11 @@ message VoteResponse
 message LogEntry
 {
   uint64 term = 1;
+  ClientAction action = 2;
+}
+
+message ClientAction
+{
   oneof Action {
     BuyRequest buy_request = 2;
     SellRequest sell_request = 3;

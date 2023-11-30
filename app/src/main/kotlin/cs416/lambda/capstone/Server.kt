@@ -14,7 +14,7 @@ private val logger = KotlinLogging.logger {}
  */
 class Server(
     private val config: ClusterConfig,
-    clientPort: Int,
+    private val clientPort: Int,
 ) {
     private val nodeId = runCatching { config.id.toInt() }
         .getOrElse { throw IllegalArgumentException("invalid ID for node, and must be an Integer within 0 and the max number of nodes") }
@@ -40,14 +40,16 @@ class Server(
     // RPC Listener for trading with client
     private val tradingService: Server = ServerBuilder
         .forPort(clientPort)
-        .addService(TradeService())
+        .addService(TradeService(node))
         .build()
 
     fun start() {
-//        tradingService.start()
-//        logger.debug { "Node $nodeId started, listening on $clientPort for client requests" }
+        tradingService.start()
+        logger.info { "Node $nodeId started, listening on $clientPort for client requests" }
+
         raftService.start()
         logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
+
         logger.debug { "Other nodes: $configs" }
         Runtime.getRuntime().addShutdownHook(
             Thread {
@@ -58,19 +60,22 @@ class Server(
     }
 
     private fun stop() {
-//        tradingService.shutdown()
+        tradingService.shutdown()
         raftService.shutdown()
         node.close()
     }
 
     fun blockUntilShutdown() {
-//        tradingService.awaitTermination()
+        tradingService.awaitTermination()
         raftService.awaitTermination()
     }
 
-    internal class TradeService : TradeGrpcKt.TradeCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyRequest) = buyReply {
+    internal class TradeService(private val node: Node) : TradeGrpcKt.TradeCoroutineImplBase() {
+        override suspend fun buyStock(request: BuyRequest) : BuyReply  {
             logger.debug { "Buy request received: $request" }
+            node.handleClientRequest(clientAction {
+                buyRequest = request
+            })
 
             // Response to client
             return buyReply { purchased = false }

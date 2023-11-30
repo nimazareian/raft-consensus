@@ -6,6 +6,7 @@ import cs416.lambda.capstone.state.NodeState
 import cs416.lambda.capstone.state.initializeNodeState
 import cs416.lambda.capstone.util.ObserverFactory
 import cs416.lambda.capstone.util.asShortInfoString
+import cs416.lambda.capstone.util.getFullInfo
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
@@ -20,10 +21,6 @@ class Node(
     private var currentTerm: Long = 0
     private var currentLeader: Int? = null
     private var logs = NodeLogs()
-
-    // How many log entries since the start have we committed
-    // TODO: Can we remove this and read it from NodeLog?
-    private var commitLength: Long = 0
 
     /**
      * Fields used for leader election
@@ -124,9 +121,23 @@ class Node(
 
     private fun handleAppendEntriesResponseCallback() = { response: AppendEntriesResponse ->
         logger.debug { "Received response back from node ${response.nodeId}" }
-        if (response.isSuccessful) {
-            ackedLength[response.nodeId] = response.logAckLen
-        }
+        val node = nodes.firstOrNull { it.stubNodeId == response.nodeId }
+        if (node == null) {
+            logger.error { "Received response from unknown node ${response.nodeId}" }
+        } else {
+            if (response.isSuccessful) {
+                val ackLen = response.logAckLen.toInt()
+                node.matchIndex = ackLen
+                node.nextIndex = ackLen + 1
+                logger.debug { "Updated node ${node.stubNodeId}: matchIndex=${node.matchIndex}, nextIndex=${node.nextIndex}" }
+
+                // Update the commit index to the highest log index which the
+                // quorum of nodes have acknowledged
+                nodes.sortBy { it.matchIndex }
+                logs.commit(nodes[(nodes.size - 1) / 2].matchIndex)
+            } else {
+                node.decreaseIndex()
+            }
 
             if (response.currentTerm > currentTerm) {
                 logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
@@ -143,7 +154,7 @@ class Node(
                 logger.debug { "Received vote response back from node ${response.nodeId}" }
                 votesReceived.add(response.nodeId)
                 if (votesReceived.size > (nodes.size + 1) / 2.0) {
-                    logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}" }
+                    logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}. Votes from $votesReceived" }
                     stateMachine.transition(Event.ReceivedQuorum)
                 }
             } else {
@@ -222,17 +233,19 @@ class Node(
             heartBeatTimeoutTimer.resetTimer()
         }
 
-        if (request.currentTerm < this.currentTerm)
+        if (request.currentTerm < this.currentTerm) {
             // TODO: Include log_ack_len, missing fields
-            return AppendEntriesResponse
-            .newBuilder()
-            .setIsSuccessful(false)
-            .build()
-            .also {
-                logger.debug {
-                    "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+            return response
+                .setCurrentTerm(this.currentTerm)
+                .setLogAckLen(logs.lastIndex().toLong())
+                .setIsSuccessful(false)
+                .build()
+                .also {
+                    logger.debug {
+                        "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                    }
                 }
-            }
+        }
 
         // TODO maybe us greater or equal
         if (currentTerm < request.currentTerm) {
@@ -245,9 +258,9 @@ class Node(
         // TODO: need to test later with leader failures
         // check that prev log entry term of our state matches log entry term of request
         if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
-            return AppendEntriesResponse
-                .newBuilder()
+            return response
                 .setCurrentTerm(currentTerm)
+                .setLogAckLen(logs.lastIndex().toLong())
                 .setIsSuccessful(false)
                 .build()
                 .also { logger.warn { "Leader is tweaking fr" } }
@@ -263,6 +276,8 @@ class Node(
             .zip(request.entriesList) // TODO do we need to reverse list
             .forEach { (idx, entry) ->
                 if (!logs.checkIndexTerm(idx, entry.term)) {
+                    // Existing entry conflicts with new one (same index but different terms)
+                    // Delete existing entry and all that follow it
                     logs.prune(idx)
                 }
                 logs[idx] = entry
@@ -283,18 +298,73 @@ class Node(
             .build()
     }
 
+    suspend fun handleClientRequest(request: ClientAction): Boolean {
+        logger.info { "handling client request" }
+        // TODO: Forward request as a LogEntry to all stub nodes and
+        //       once the majority of the nodes have acknowledged the request
+        //       commit the request and respond back to the client
+        if (stateMachine.state != NodeState.Leader) {
+            // TODO: Respond back to the client that we are not the leader
+            logger.warn { "Trying to handle client request while in state ${stateMachine.state}" }
+            return false
+        }
+
+        val entry = LogEntry
+            .newBuilder()
+            .setTerm(currentTerm)
+            .setAction(request)
+            .build()
+
+        val index = logs.append(entry)
+
+        // Asynchronously send updated log entries to all nodes and update the tracked state
+        propagateLogToFollowers()
+
+        // TODO: Consider using a CompletableDeferred instead of polling
+        while (logs.commitIndex < index) {
+            delay(5)
+        }
+
+        return true
+    }
+
+    private fun propagateLogToFollowers() {
+        // TODO: Note that doing the timer like this could result in the heartbeats
+        //       not be the exact same duration apart?!
+        // Set up a timer for the next heartbeat
+        sendHeartBeatTimer.resetTimer()
+
+        logger.debug { "Broadcasting to $nodes" }
+
+        nodes.map { stubNode ->
+            logger.debug { "Sending AppendEntriesRequest to ${stubNode.address}:${stubNode.port}" }
+
+            val prevLogIndexForFollowerNode =
+                stubNode.nextIndex - 1 // TODO index of log entry that precedes entries this node is sending
+            val prevLogTermForFollowerNode = logs[prevLogIndexForFollowerNode]?.term
+
+            if (prevLogIndexForFollowerNode != -1 && prevLogTermForFollowerNode == null) {
+                throw RuntimeException("Term in previous log entry is null. prevLogIndexForFollowerNode = $prevLogIndexForFollowerNode")
+            }
+            val appendRequest = AppendEntriesRequest
+                .newBuilder()
+                .setCurrentTerm(this@Node.currentTerm)
+                .setLeaderId(this@Node.nodeId)
+                .setLeaderCommitIndex(this@Node.logs.commitIndex.toLong())
+                .setPrevLogIndex(prevLogIndexForFollowerNode.toLong())
+                .setPrevLogTerm(prevLogTermForFollowerNode ?: -1L)
+                .addAllEntries(this@Node.logs.starting(prevLogIndexForFollowerNode + 1)) // TODO: Include entries
+                .build()
+            stubNode.appendEntries(appendRequest)
+        }
+    }
+
     private fun sendHeartbeat() {
         // Only send heartbeats if we are the leader
         if (stateMachine.state != NodeState.Leader) {
             logger.warn { "Trying to send heartbeat while in state ${stateMachine.state}" }
             return
         }
-        logger.debug { "Broadcasting heartbeats to $nodes" }
-
-        // TODO: Note that doing the timer like this could result in the heartbeats
-        //       not be the exact same duration apart.
-        // Set up a timer for the next heartbeat
-        sendHeartBeatTimer.resetTimer()
 
         // Asynchronously send heartbeats (AppendEntriesRequest) to all nodes and update the tracked state
         propagateLogToFollowers()
