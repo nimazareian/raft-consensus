@@ -286,7 +286,7 @@ class Node(
         currentLeader = request.leaderId
         logs.commit(request.leaderCommitIndex.toInt())
 
-        return response
+        val responseProto = response
             .setCurrentTerm(this.currentTerm)
             // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
             //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
@@ -296,6 +296,9 @@ class Node(
             .setLogAckLen(logs.lastIndex().toLong())
             .setIsSuccessful(true)
             .build()
+
+        logger.debug { "Sending response $responseProto, logs.lastIndex().toLong()" }
+        return responseProto
     }
 
     suspend fun handleClientRequest(request: ClientAction): Boolean {
