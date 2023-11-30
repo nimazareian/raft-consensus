@@ -33,7 +33,7 @@ message AppendEntriesResponse
   // Current term that the node is in. Used by leader to update it self
   uint64 current_term = 2;
   // how many log entries have been received from the leader
-  int64 log_ack_len = 3;
+  int64 log_ack_index = 3;
   // True if the LogRequest was received and appended correctly
   bool is_successful = 4;
 }

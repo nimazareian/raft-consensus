@@ -55,6 +55,6 @@ class StubNode(
     }
 
     override fun toString(): String {
-        return "StubNode(host='$address', port=$port)"
+        return "StubNode(id=$stubNodeId, host='$address', port=$port)"
     }
 }

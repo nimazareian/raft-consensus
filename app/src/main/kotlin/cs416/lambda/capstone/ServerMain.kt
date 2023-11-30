@@ -14,6 +14,10 @@ fun main(args: Array<String>) {
 
     val configPath = loadConfig(args)
 
+    print(BANNER)
+
+    println()
+
     val config = ConfigLoaderBuilder
         .default()
         .addDefaultParsers()

@@ -5,10 +5,9 @@ import cs416.lambda.capstone.state.Event
 import cs416.lambda.capstone.state.NodeState
 import cs416.lambda.capstone.state.initializeNodeState
 import cs416.lambda.capstone.util.ObserverFactory
-import cs416.lambda.capstone.util.asFullDebugString
-import cs416.lambda.capstone.util.asInfoString
-import cs416.lambda.capstone.util.asShortInfoString
+import cs416.lambda.capstone.util.asFullString
 import cs416.lambda.capstone.util.asString
+import cs416.lambda.capstone.util.asShortString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -125,21 +124,26 @@ class Node(
     }
 
     private fun handleAppendEntriesResponseCallback() = { response: AppendEntriesResponse ->
-        logger.debug { "Received response back from node ${response.nodeId}" }
+        logger.debug { "Processing ${response.asString()}" }
         val node = nodes.firstOrNull { it.stubNodeId == response.nodeId }
         if (node == null) {
             logger.error { "Received response from unknown node ${response.nodeId}" }
         } else {
             if (response.isSuccessful) {
-                val ackLen = response.logAckLen.toInt()
-                node.matchIndex = ackLen
-                node.nextIndex = ackLen + 1
-                logger.debug { "Updated node ${node.stubNodeId}: matchIndex=${node.matchIndex}, nextIndex=${node.nextIndex}" }
+                val ackIndex = response.logAckIndex.toInt()
+                logger.debug { "Updating $node with matchIndex=${node.matchIndex}, nextIndex=${node.nextIndex}" }
+                node.matchIndex = ackIndex
+                node.nextIndex = ackIndex + 1
 
-                // Update the commit index to the highest log index which the
-                // quorum of nodes have acknowledged
+                // Update the commit index to the highest log index which the quorum has acknowledged
                 nodes.sortBy { it.matchIndex }
-                logs.commit(nodes[(nodes.size - 1) / 2].matchIndex)
+                // TODO there was bug after election where nodes would try to commit to -1 on empty append (no client req)
+                val quorumIndex = nodes[(nodes.size - 1) / 2].matchIndex
+                if (logs.commitIndex < quorumIndex) {
+                    val commitIndex = min(logs.lastIndex(), quorumIndex)
+                    logs.commit(commitIndex)
+                    logger.debug { "Committing to index $commitIndex" }
+                }
             } else {
                 node.decreaseIndex()
             }
@@ -153,10 +157,10 @@ class Node(
     }
 
     private fun handleVoteResponseCallback() = { response: VoteResponse ->
+        logger.debug { "Processing ${response.asString()}" }
         // Ignore vote responses if we are not a candidate
         if (stateMachine.state == NodeState.Candidate) {
             if (response.voteGranted && response.currentTerm == currentTerm) {
-                logger.debug { "Received vote response back from node ${response.nodeId}" }
                 votesReceived.add(response.nodeId)
                 if (votesReceived.size > (nodes.size + 1) / 2.0) {
                     logger.debug { "Received quorum ${votesReceived.size}/${nodes.size + 1}. Votes from $votesReceived" }
@@ -172,7 +176,7 @@ class Node(
                 stateMachine.transition(Event.NewTermDiscovered)
             }
         } else {
-            logger.debug { "Received vote response back from node ${response.nodeId} but I am not a candidate" }
+            logger.debug { "Cannot accept vote response from node ${response.nodeId}, I am not a candidate" }
         }
     }
 
@@ -180,46 +184,52 @@ class Node(
      * Process a VoteRequest
      */
     fun handleVoteRequest(request: VoteRequest): VoteResponse {
-        val response = VoteResponse
-            .newBuilder()
-            .setNodeId(nodeId)
+        return runBlocking {
+            mutex.withLock {
+                logger.debug { "Processing ${request.asFullString()}" }
 
-        logger.debug { "Received: ${request.asShortInfoString()}" }
+                val response = VoteResponse
+                    .newBuilder()
+                    .setNodeId(nodeId)
 
-        if (stateMachine.state != NodeState.Leader) {
-            logger.debug { "Resetting heartbeat timer" }
-            heartBeatTimeoutTimer.resetTimer()
-        }
-
-        // if we have already voted then wait for next election.
-        // update our term so we are ready to vote
-        if (this.currentTerm < request.currentTerm) {
-            stateMachine.transition(Event.NewTermDiscovered)
-        }
-
-        if (currentTerm <= request.currentTerm &&
-            (votedFor == null || votedFor == request.candidateId) &&
-            request.lastLogIndex >= logs.commitIndex
-        ) {
-            // TODO: When do we reset votedFor
-            votedFor = request.candidateId
-            return response
-                .setCurrentTerm(request.currentTerm)
-                .setVoteGranted(true)
-                .build()
-                .also {
-                    logger.debug { "Accepted vote request and voting for ${request.candidateId}" }
+                if (stateMachine.state != NodeState.Leader) {
+                    logger.debug { "Resetting heartbeat timer" }
+                    heartBeatTimeoutTimer.resetTimer()
                 }
-        } else {
-            return response
-                .setCurrentTerm(currentTerm)
-                .setVoteGranted(false)
-                .build()
-                .also {
-                    logger.debug { "Denied vote request to ${request.candidateId} for term ${request.currentTerm} since I have already voted for $votedFor" }
-                }
-        }
 
+                // if we have already voted then wait for next election.
+                // update our term so we are ready to vote
+                if (this@Node.currentTerm < request.currentTerm) {
+                    stateMachine.transition(Event.NewTermDiscovered)
+                        .also {
+                            logger.debug { "This node's term (${this@Node.currentTerm}) is smaller than the term of the request ${request.currentTerm}, setting current term to request's term" }
+                        }
+                }
+
+                if (currentTerm <= request.currentTerm &&
+                    (votedFor == null || votedFor == request.candidateId) &&
+                    request.lastLogIndex >= logs.commitIndex
+                ) {
+                    // TODO: When do we reset votedFor
+                    votedFor = request.candidateId
+                    return@runBlocking response
+                        .setCurrentTerm(request.currentTerm)
+                        .setVoteGranted(true)
+                        .build()
+                        .also {
+                            logger.debug { "Accepted vote request and voting for ${request.candidateId}" }
+                        }
+                } else {
+                    return@runBlocking response
+                        .setCurrentTerm(currentTerm)
+                        .setVoteGranted(false)
+                        .build()
+                        .also {
+                            logger.debug { "Denied vote request to ${request.candidateId} for term ${request.currentTerm} since I have already voted for $votedFor" }
+                        }
+                }
+            }
+        }
     }
 
     /**
@@ -228,7 +238,8 @@ class Node(
     fun handleAppendEntriesRequest(request: AppendEntriesRequest): AppendEntriesResponse {
         return runBlocking {
             mutex.withLock {
-                logger.debug { "Received: ${request.asFullDebugString()}" }
+                logger.debug { "Processing: ${request.asFullString()}" }
+//                logger.debug { "Processing: ${request.asFullDebugString()}" }
 
                 val response = AppendEntriesResponse
                     .newBuilder()
@@ -244,12 +255,12 @@ class Node(
                     // TODO: Include log_ack_len, missing fields
                     return@runBlocking response
                         .setCurrentTerm(this@Node.currentTerm)
-                        .setLogAckLen(logs.lastIndex().toLong())
+                        .setLogAckIndex(logs.lastIndex().toLong())
                         .setIsSuccessful(false)
                         .build()
                         .also {
                             logger.debug {
-                                "This node's term (${this@Node.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                                "This node's term (${this@Node.currentTerm}) exceeds the term of the request (${request.asShortString()}), replying with response unsuccessful message"
                             }
                         }
                 }
@@ -262,7 +273,7 @@ class Node(
                     stateMachine
                         .transition(Event.NewTermDiscovered)
                         .also {
-                            logger.debug { "This node's term (${this@Node.currentTerm}) is smaller than the term of the request (${request.asShortInfoString()}), setting current term to request's term" }
+                            logger.debug { "This node's term (${this@Node.currentTerm}) is smaller than the term of the request (${request.asShortString()}), setting current term to request's term" }
                         }
                 }
 
@@ -271,7 +282,7 @@ class Node(
                 if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
                     return@runBlocking response
                         .setCurrentTerm(currentTerm)
-                        .setLogAckLen(logs.lastIndex().toLong())
+                        .setLogAckIndex(logs.lastIndex().toLong())
                         .setIsSuccessful(false)
                         .build()
                         .also {
@@ -309,9 +320,11 @@ class Node(
                 // if leader has a greater commit index, then commit up to thew minimum his index, or the last index (write errors may have occured)
                 // if the index is less, just commit to the last index
                 val lastIndex = logs.lastIndex()
-                val commitIndex = if (logs.commitIndex < leaderIndex) min(logs.lastIndex(), leaderIndex) else lastIndex
-                logger.debug { "Committing to index $commitIndex" }
-                logs.commit(commitIndex)
+                if (logs.commitIndex < leaderIndex) {
+                    val commitIndex = min(lastIndex, leaderIndex)
+                    logs.commit(commitIndex)
+                    logger.debug { "Committing to index $commitIndex" }
+                }
 
 
                 val responseProto = response
@@ -321,18 +334,18 @@ class Node(
                     //  -- step 2 [x] checked by the first checkIndexTerm (4th if statement) - das a lot of if statements hmm
                     //  -- step 3 [x] occurs by log pruning when updating entries
                     // rest of steps should also be done
-                    .setLogAckLen(lastIndex.toLong())
+                    .setLogAckIndex(lastIndex.toLong())
                     .setIsSuccessful(true)
                     .build()
 
-                logger.debug { "Sending response ${responseProto.asInfoString()}, $lastIndex" }
+                logger.debug { "Sending response ${responseProto.asString()}, $lastIndex" }
                 return@runBlocking responseProto
             }
         }
     }
 
     suspend fun handleClientRequest(request: ClientAction): Boolean {
-        logger.info { "handling client request" }
+        logger.info { "Handling ${request.asString()}" }
         // TODO: Forward request as a LogEntry to all stub nodes and
         //       once the majority of the nodes have acknowledged the request
         //       commit the request and respond back to the client
@@ -378,8 +391,6 @@ class Node(
 
 
         nodes.map { stubNode ->
-            logger.debug { "Sending AppendEntriesRequest to ${stubNode.address}:${stubNode.port}" }
-
             val prevLogIndexForFollowerNode =
                 stubNode.nextIndex - 1 // TODO index of log entry that precedes entries this node is sending
             val prevLogTermForFollowerNode = logs[prevLogIndexForFollowerNode]?.term
@@ -396,6 +407,8 @@ class Node(
                 .setPrevLogTerm(prevLogTermForFollowerNode ?: -1L)
                 .addAllEntries(this@Node.logs.starting(prevLogIndexForFollowerNode + 1)) // TODO: Include entries
                 .build()
+
+            logger.debug { "Sending ${appendRequest.asShortString()} to $stubNode" }
             stubNode.appendEntries(appendRequest)
         }
     }

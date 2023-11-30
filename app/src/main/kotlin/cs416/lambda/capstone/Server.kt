@@ -72,9 +72,9 @@ class Server(
 
     internal class TradeService(val callback: suspend (ClientAction) -> Unit) : TradeGrpcKt.TradeCoroutineImplBase() {
         override suspend fun buyStock(request: BuyRequest): BuyReply {
-            logger.debug { "Buy request received: $request" }
+//            logger.debug { "Buy request received ${request.asString()}" }
             val response = BuyReply.newBuilder()
-            val reply = runCatching {
+            runCatching {
                 callback(clientAction {
                     buyRequest = request
                 })

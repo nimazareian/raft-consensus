@@ -53,7 +53,12 @@ class NodeLogs {
     }
 
     fun commit(index: Int) {
-        commitIndex = index
+        if (indexInRange(index)) {
+            commitIndex = index
+        } else {
+            logger.warn { "Invalid commit index given" }
+        }
+
     }
 
     fun prune(startIndex: Int) {
@@ -74,6 +79,6 @@ class NodeLogs {
 
     override fun toString(): String {
         // TODO format entries somehow
-        return "NodeLogs(count = ${this.entries.size}, commitIndex=${this.commitIndex}"
+        return "NodeLogs(count = ${this.entries.size}, commitIndex=${this.commitIndex})"
     }
 }
