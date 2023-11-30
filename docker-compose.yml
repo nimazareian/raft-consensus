@@ -7,6 +7,7 @@ services:
     ports:
       # HOST:CONTAINER
       - "4001:4000"
+      - "6001:6000"
     environment:
       ID: "1"
     build:
@@ -21,6 +22,7 @@ services:
     container_name: node_two
     ports:
       - "4002:4000"
+      - "6002:6000"
     environment:
       ID: "2"
     build:
@@ -35,6 +37,7 @@ services:
     container_name: node_three
     ports:
       - "4003:4000"
+      - "6003:6000"
     environment:
       ID: "3"
     build:
