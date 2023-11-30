@@ -11,16 +11,21 @@ class NodeLogs {
     fun lastIndex() = entries.lastIndex // returns -1 on empty
     fun lastTerm(): Long? = entries.lastOrNull()?.term
 
+    fun indexInRange(idx: Int): Boolean = 0 <= idx && idx < entries.size
+    fun starting(index: Int): List<LogEntry> {
+        return entries.filterIndexed { i, _ -> i >= index }
+    }
+
     var commitIndex: Int = -1
         private set
 
     /**
      * Appends log to end of entries list.
      */
-    fun append(log: LogEntry) : Int {
+    fun append(log: LogEntry): Int {
         val index = entries.size
         entries.add(log)
-//        return the previous index to the caller.
+//        return the index of log entry that was inserted to the caller.
 //        The caller may want to check the state for the index to update before proceeding
 //        Eg.
 //        while (index > state.log.commitIndex -> refering to cluster state) {

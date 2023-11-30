@@ -7,7 +7,9 @@ import cs416.lambda.capstone.state.initializeNodeState
 import cs416.lambda.capstone.util.ObserverFactory
 import cs416.lambda.capstone.util.asShortInfoString
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
+import java.lang.RuntimeException
 
 private val logger = KotlinLogging.logger {}
 
@@ -56,7 +58,8 @@ class Node(
     init {
         val requestVoteResponseObserver = ObserverFactory.buildProtoObserver(mutex, handleVoteResponseCallback())
 
-        val appendEntriesResponseStreamObserver = ObserverFactory.buildProtoObserver(mutex, handleAppendEntriesResponseCallback())
+        val appendEntriesResponseStreamObserver =
+            ObserverFactory.buildProtoObserver(mutex, handleAppendEntriesResponseCallback())
 
         // List of RPC Senders
         // stub class for communicating with other nodes
@@ -64,6 +67,7 @@ class Node(
             ArrayList(nodeConfigs
                 .map { n ->
                     StubNode(
+                        n.id,
                         n.address,
                         n.port,
                         requestVoteResponseObserver,
@@ -118,20 +122,21 @@ class Node(
         this.logs = log
     }
 
-    private fun handleAppendEntriesResponseCallback() = { response : AppendEntriesResponse ->
+    private fun handleAppendEntriesResponseCallback() = { response: AppendEntriesResponse ->
         logger.debug { "Received response back from node ${response.nodeId}" }
         if (response.isSuccessful) {
             ackedLength[response.nodeId] = response.logAckLen
         }
 
-        if (response.currentTerm > currentTerm) {
-            logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
-            currentTerm = response.currentTerm
-            stateMachine.transition(Event.NewTermDiscovered)
+            if (response.currentTerm > currentTerm) {
+                logger.debug { "Discovered new term ${response.currentTerm} from AppendEntriesResponse ${response.nodeId}" }
+                currentTerm = response.currentTerm
+                stateMachine.transition(Event.NewTermDiscovered)
+            }
         }
     }
 
-    private fun handleVoteResponseCallback() = { response : VoteResponse ->
+    private fun handleVoteResponseCallback() = { response: VoteResponse ->
         // Ignore vote responses if we are not a candidate
         if (stateMachine.state == NodeState.Candidate) {
             if (response.voteGranted && response.currentTerm == currentTerm) {
@@ -205,7 +210,11 @@ class Node(
      * Process a AppendEntriesRequest
      */
     fun handleAppendEntriesRequest(request: AppendEntriesRequest): AppendEntriesResponse {
-        logger.debug { "Received: ${request.asShortInfoString()}" }
+        logger.debug { "Received: ${request.getFullInfo()}" }
+
+        val response = AppendEntriesResponse
+            .newBuilder()
+            .setNodeId(this.nodeId)
 
         // Reset the heartbeat timeout
         if (stateMachine.state != NodeState.Leader) {
@@ -233,6 +242,7 @@ class Node(
             stateMachine.transition(Event.NewTermDiscovered)
         }
 
+        // TODO: need to test later with leader failures
         // check that prev log entry term of our state matches log entry term of request
         if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
             return AppendEntriesResponse
@@ -250,7 +260,7 @@ class Node(
         // loop through request entries and update the log
         (startIdx..endIdx)
             .toList()
-            .zip(request.entriesList)
+            .zip(request.entriesList) // TODO do we need to reverse list
             .forEach { (idx, entry) ->
                 if (!logs.checkIndexTerm(idx, entry.term)) {
                     logs.prune(idx)
@@ -261,21 +271,16 @@ class Node(
         currentLeader = request.leaderId
         logs.commit(request.leaderCommitIndex.toInt())
 
-
-        return appendEntriesResponse {
-            nodeId = this.nodeId
-            // Response to client
-            currentTerm = this.currentTerm
-            isSuccessful = true
-
+        return response
+            .setCurrentTerm(this.currentTerm)
             // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
             //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
             //  -- step 2 [x] checked by the first checkIndexTerm (4th if statement) - das a lot of if statements hmm
             //  -- step 3 [x] occurs by log pruning when updating entries
             // rest of steps should also be done
-
-            logAckLen = 0 // TODO
-        }
+            .setLogAckLen(logs.lastIndex().toLong())
+            .setIsSuccessful(true)
+            .build()
     }
 
     private fun sendHeartbeat() {
@@ -291,17 +296,8 @@ class Node(
         // Set up a timer for the next heartbeat
         sendHeartBeatTimer.resetTimer()
 
-        // Asynchronously send heartbeats to all nodes and update the tracked state
-        nodes.map { n ->
-            logger.debug { "Sending heartbeat to node ${n.address}:${n.port}" }
-            n.appendEntries(appendEntriesRequest {
-                currentTerm = this@Node.currentTerm
-                leaderId = this@Node.nodeId
-                prevLogIndex = 0 // TODO: update these fields
-                commitLength = 0 // TODO:
-                // Ignoring entries
-            })
-        }
+        // Asynchronously send heartbeats (AppendEntriesRequest) to all nodes and update the tracked state
+        propagateLogToFollowers()
     }
 
     private fun startElection() {
@@ -333,20 +329,10 @@ class Node(
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
-                lastLogIndex =  this@Node.logs.lastIndex().toLong()
+                lastLogIndex = this@Node.logs.lastIndex().toLong()
                 lastLogTerm = (this@Node.logs.lastTerm() ?: -1).toLong()
             })
         }
-    }
-
-    private fun electionTimeout() {
-        logger.debug { "Election timer timed out" }
-        stateMachine.transition(Event.ElectionTimeout)
-    }
-
-    private fun heartBeatTimeout() {
-        logger.debug { "Heartbeat timer timed out" }
-        stateMachine.transition(Event.LeaderFailureSuspected)
     }
 
     private fun startSendingHeartBeats() {
@@ -376,8 +362,16 @@ class Node(
         } else {
             logger.warn { "Trying to listen for heartbeats while in state ${stateMachine.state}" }
         }
+    }
 
+    private fun electionTimeout() {
+        logger.debug { "Election timer timed out" }
+        stateMachine.transition(Event.ElectionTimeout)
+    }
 
+    private fun heartBeatTimeout() {
+        logger.debug { "Heartbeat timer timed out" }
+        stateMachine.transition(Event.LeaderFailureSuspected)
     }
 
     fun close() {
@@ -386,10 +380,6 @@ class Node(
 
     override fun toString(): String {
         return "Node(id='$nodeId', state=${stateMachine.state}, leader=$currentLeader currentTerm=$currentTerm, votedFor=$votedFor)"
-    }
-
-    fun applyCommand(entry: LogEntry) {
-        logs.append(entry)
     }
 }
 

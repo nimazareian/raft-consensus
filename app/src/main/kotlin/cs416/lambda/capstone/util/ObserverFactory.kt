@@ -24,7 +24,7 @@ class ObserverFactory {
                 }
 
                 override fun onError(t: Throwable) {
-                    logger.error { "Error occurred proccessing response $t" }
+                    logger.error { "Error occurred proccessing response $t, caused by ${t.cause} with ${t.printStackTrace()}" }
                 }
 
                 override fun onCompleted() {

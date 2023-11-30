@@ -73,7 +73,7 @@ class Server(
             logger.debug { "Buy request received: $request" }
 
             // Response to client
-            purchased = false
+            return buyReply { purchased = false }
         }
     }
 

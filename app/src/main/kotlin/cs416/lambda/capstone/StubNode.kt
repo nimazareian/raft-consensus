@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit
 private val logger = KotlinLogging.logger { }
 
 class StubNode(
+    val stubNodeId: Int,
     val address: String,
     val port: Int,
     private val requestVoteResponseObserver: StreamObserver<VoteResponse>,
@@ -33,6 +34,12 @@ class StubNode(
         // TODO: Should we wait till the channel is ready?
         // stub.withWaitForReady()
         logger.debug { "StubNode $address:$port created" }
+    }
+
+    fun decreaseIndex() {
+        if (nextIndex > 0) {
+            nextIndex -= 1
+        }
     }
 
     fun requestVote(request: VoteRequest) {
