@@ -5,12 +5,17 @@ import cs416.lambda.capstone.state.Event
 import cs416.lambda.capstone.state.NodeState
 import cs416.lambda.capstone.state.initializeNodeState
 import cs416.lambda.capstone.util.ObserverFactory
+import cs416.lambda.capstone.util.asFullDebugString
+import cs416.lambda.capstone.util.asInfoString
 import cs416.lambda.capstone.util.asShortInfoString
-import cs416.lambda.capstone.util.getFullInfo
+import cs416.lambda.capstone.util.asString
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.lang.RuntimeException
+import kotlin.math.min
 
 private val logger = KotlinLogging.logger {}
 
@@ -221,84 +226,109 @@ class Node(
      * Process a AppendEntriesRequest
      */
     fun handleAppendEntriesRequest(request: AppendEntriesRequest): AppendEntriesResponse {
-        logger.debug { "Received: ${request.getFullInfo()}" }
+        return runBlocking {
+            mutex.withLock {
+                logger.debug { "Received: ${request.asFullDebugString()}" }
 
-        val response = AppendEntriesResponse
-            .newBuilder()
-            .setNodeId(this.nodeId)
+                val response = AppendEntriesResponse
+                    .newBuilder()
+                    .setNodeId(this@Node.nodeId)
 
-        // Reset the heartbeat timeout
-        if (stateMachine.state != NodeState.Leader) {
-            logger.debug { "Resetting heartbeat timer" }
-            heartBeatTimeoutTimer.resetTimer()
-        }
+                // Reset the heartbeat timeout
+                if (stateMachine.state != NodeState.Leader) {
+                    logger.debug { "Resetting heartbeat timer" }
+                    heartBeatTimeoutTimer.resetTimer()
+                }
 
-        if (request.currentTerm < this.currentTerm) {
-            // TODO: Include log_ack_len, missing fields
-            return response
-                .setCurrentTerm(this.currentTerm)
-                .setLogAckLen(logs.lastIndex().toLong())
-                .setIsSuccessful(false)
-                .build()
-                .also {
-                    logger.debug {
-                        "This node's term (${this.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                if (request.currentTerm < this@Node.currentTerm) {
+                    // TODO: Include log_ack_len, missing fields
+                    return@runBlocking response
+                        .setCurrentTerm(this@Node.currentTerm)
+                        .setLogAckLen(logs.lastIndex().toLong())
+                        .setIsSuccessful(false)
+                        .build()
+                        .also {
+                            logger.debug {
+                                "This node's term (${this@Node.currentTerm}) exceeds the term of the request (${request.asShortInfoString()}), replying with response unsuccessful message"
+                            }
+                        }
+                }
+
+                // TODO maybe use greater or equal
+                if (currentTerm < request.currentTerm) {
+                    currentTerm = request.currentTerm
+                    votedFor = null
+                    currentLeader = request.leaderId
+                    stateMachine
+                        .transition(Event.NewTermDiscovered)
+                        .also {
+                            logger.debug { "This node's term (${this@Node.currentTerm}) is smaller than the term of the request (${request.asShortInfoString()}), setting current term to request's term" }
+                        }
+                }
+
+                // TODO: need to test later with leader failures
+                // check that prev log entry term of our state matches log entry term of request
+                if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
+                    return@runBlocking response
+                        .setCurrentTerm(currentTerm)
+                        .setLogAckLen(logs.lastIndex().toLong())
+                        .setIsSuccessful(false)
+                        .build()
+                        .also {
+                            logger.warn { "Leader is tweaking fr" }
+                        }
+                }
+
+                // initialize the start and end indexes that will get updated in this node's logs
+                val startIdx = request.prevLogIndex.toInt() + 1
+                val endIdx = startIdx + request.entriesCount
+
+                logger.debug { "Starting log update with log = $logs and start = $startIdx and end = $endIdx" }
+
+                // loop through request entries and update the log
+                // TODO bug? endIdx is inclusive
+                (startIdx..<endIdx)
+                    .toList()
+                    .zip(request.entriesList) // TODO do we need to reverse list
+                    .forEach { (idx, entry) ->
+                        if (!logs.checkIndexTerm(idx, entry.term)) {
+                            // Existing entry conflicts with new one (same index but different terms)
+                            // Delete existing entry and all that follow it
+                            logger.debug { "Pruning logs starting at idx=$idx" }
+                            logs.prune(idx)
+                        }
+                        logger.debug { "Setting log entry=${entry.asString()} to index=$idx" }
+                        logs[idx] = entry
                     }
-                }
-        }
 
-        // TODO maybe us greater or equal
-        if (currentTerm < request.currentTerm) {
-            currentTerm = request.currentTerm
-            votedFor = null
-            currentLeader = request.leaderId
-            stateMachine.transition(Event.NewTermDiscovered)
-        }
 
-        // TODO: need to test later with leader failures
-        // check that prev log entry term of our state matches log entry term of request
-        if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
-            return response
-                .setCurrentTerm(currentTerm)
-                .setLogAckLen(logs.lastIndex().toLong())
-                .setIsSuccessful(false)
-                .build()
-                .also { logger.warn { "Leader is tweaking fr" } }
-        }
+                currentLeader = request.leaderId
+                // TODO BUG?: logs.commit(request.leaderCommitIndex.toInt()) // leader commit index is -1
+                // Assumes that all logs up to end idx is committed
+                val leaderIndex = request.leaderCommitIndex.toInt()
+                // if leader has a greater commit index, then commit up to thew minimum his index, or the last index (write errors may have occured)
+                // if the index is less, just commit to the last index
+                val lastIndex = logs.lastIndex()
+                val commitIndex = if (logs.commitIndex < leaderIndex) min(logs.lastIndex(), leaderIndex) else lastIndex
+                logger.debug { "Committing to index $commitIndex" }
+                logs.commit(commitIndex)
 
-        // initialize the start and end indexes that will get updated in this node's logs
-        val startIdx = request.prevLogIndex.toInt() + 1
-        val endIdx = startIdx + request.entriesCount
 
-        // loop through request entries and update the log
-        (startIdx..endIdx)
-            .toList()
-            .zip(request.entriesList) // TODO do we need to reverse list
-            .forEach { (idx, entry) ->
-                if (!logs.checkIndexTerm(idx, entry.term)) {
-                    // Existing entry conflicts with new one (same index but different terms)
-                    // Delete existing entry and all that follow it
-                    logs.prune(idx)
-                }
-                logs[idx] = entry
+                val responseProto = response
+                    .setCurrentTerm(this@Node.currentTerm)
+                    // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
+                    //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
+                    //  -- step 2 [x] checked by the first checkIndexTerm (4th if statement) - das a lot of if statements hmm
+                    //  -- step 3 [x] occurs by log pruning when updating entries
+                    // rest of steps should also be done
+                    .setLogAckLen(lastIndex.toLong())
+                    .setIsSuccessful(true)
+                    .build()
+
+                logger.debug { "Sending response ${responseProto.asInfoString()}, $lastIndex" }
+                return@runBlocking responseProto
             }
-
-        currentLeader = request.leaderId
-        logs.commit(request.leaderCommitIndex.toInt())
-
-        val responseProto = response
-            .setCurrentTerm(this.currentTerm)
-            // TODO: Implement AppendEntries RPC Receiver Implementation logic steps 2-5
-            //       https://web.stanford.edu/~ouster/cgi-bin/papers/raft-atc14
-            //  -- step 2 [x] checked by the first checkIndexTerm (4th if statement) - das a lot of if statements hmm
-            //  -- step 3 [x] occurs by log pruning when updating entries
-            // rest of steps should also be done
-            .setLogAckLen(logs.lastIndex().toLong())
-            .setIsSuccessful(true)
-            .build()
-
-        logger.debug { "Sending response $responseProto, logs.lastIndex().toLong()" }
-        return responseProto
+        }
     }
 
     suspend fun handleClientRequest(request: ClientAction): Boolean {
@@ -318,6 +348,8 @@ class Node(
             .setAction(request)
             .build()
 
+        logger.info { "Appending log entry ${entry.asString()}" }
+
         val index = logs.append(entry)
 
         // Asynchronously send updated log entries to all nodes and update the tracked state
@@ -332,12 +364,18 @@ class Node(
     }
 
     private fun propagateLogToFollowers() {
+        logger.debug { "Starting broadcasting to $nodes" }
         // TODO: Note that doing the timer like this could result in the heartbeats
         //       not be the exact same duration apart?!
         // Set up a timer for the next heartbeat
-        sendHeartBeatTimer.resetTimer()
+        runCatching {
+            sendHeartBeatTimer.resetTimer()
+        }.onSuccess {
+            logger.debug { "Successfully reset heartbeat timer" }
+        }.onFailure {
+            logger.debug { "Error occurred resetting heartbeat timer: $it." }
+        }
 
-        logger.debug { "Broadcasting to $nodes" }
 
         nodes.map { stubNode ->
             logger.debug { "Sending AppendEntriesRequest to ${stubNode.address}:${stubNode.port}" }

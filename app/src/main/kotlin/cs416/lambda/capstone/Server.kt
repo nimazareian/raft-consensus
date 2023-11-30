@@ -40,7 +40,7 @@ class Server(
     // RPC Listener for trading with client
     private val tradingService: Server = ServerBuilder
         .forPort(clientPort)
-        .addService(TradeService(node))
+        .addService(TradeService(node::handleClientRequest))
         .build()
 
     fun start() {
@@ -70,17 +70,25 @@ class Server(
         raftService.awaitTermination()
     }
 
-    internal class TradeService(private val node: Node) : TradeGrpcKt.TradeCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyRequest) : BuyReply  {
+    internal class TradeService(val callback: suspend (ClientAction) -> Unit) : TradeGrpcKt.TradeCoroutineImplBase() {
+        override suspend fun buyStock(request: BuyRequest): BuyReply {
             logger.debug { "Buy request received: $request" }
-            node.handleClientRequest(clientAction {
-                buyRequest = request
-            })
+            val response = BuyReply.newBuilder()
+            val reply = runCatching {
+                callback(clientAction {
+                    buyRequest = request
+                })
+            }.onFailure {
+                logger.debug { "Caught error: ${it.cause} and ${it.printStackTrace()}" }
+                response.setPurchased(false)
+            }.onSuccess {
+                response.setPurchased(true)
 
-            // Response to client
-            return buyReply { purchased = false }
+            }
+            return response.build()
         }
     }
+
 
     // Receive RPCs from other nodes and forward to Node implementation
     internal class RaftService(private val node: Node) : RaftServiceGrpcKt.RaftServiceCoroutineImplBase() {

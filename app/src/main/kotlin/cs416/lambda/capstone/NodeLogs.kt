@@ -1,7 +1,9 @@
 package cs416.lambda.capstone
 
 import cs416.lambda.capstone.util.removeRange
-import kotlin.math.min
+import io.github.oshai.kotlinlogging.KotlinLogging
+
+private val logger = KotlinLogging.logger {  }
 
 class NodeLogs {
     @Volatile
@@ -51,12 +53,13 @@ class NodeLogs {
     }
 
     fun commit(index: Int) {
-        val idx = min(lastIndex(), index)
-        commitIndex = idx
+        commitIndex = index
     }
 
     fun prune(startIndex: Int) {
-        entries.removeRange(IntRange(startIndex, entries.size))
+        if (indexInRange(startIndex)) {
+            entries.removeRange(IntRange(startIndex, entries.size))
+        }
     }
 
     /**
@@ -65,7 +68,12 @@ class NodeLogs {
      */
     fun checkIndexTerm(index: Int, term: Long): Boolean = when (index) {
         -1 -> term == -1L
-        in 0..<entries.size -> entries[index].term == term
+        in 0..<entries.size -> isNotEmpty() && entries[index].term == term
         else -> false
+    }
+
+    override fun toString(): String {
+        // TODO format entries somehow
+        return "NodeLogs(count = ${this.entries.size}, commitIndex=${this.commitIndex}"
     }
 }
