@@ -55,6 +55,9 @@ services:
       - "8000:8000"
     volumes:
       - ./envoy.yaml:/etc/envoy/envoy.yaml
+    networks:
+      default:
+        ipv4_address: 172.20.0.20
 
 
 networks:

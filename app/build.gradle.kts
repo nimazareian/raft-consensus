@@ -1,6 +1,7 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import com.google.protobuf.gradle.*
+org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType.js
 
 val grpcVersion = "1.57.2"
 val grpcKotlinVersion = "1.4.0"
@@ -112,7 +113,9 @@ protobuf {
              */
             it.builtins {
                 id("kotlin")
+//                id("")
             }
+
         }
     }
 }
