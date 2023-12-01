@@ -1,24 +1,42 @@
 package cs416.lambda.capstone
 
-fun main() {
-    val env = System.getenv()
-    val nodeId = env.getOrDefault("ID", "50").toInt()
-    val serverPort = env.getOrDefault("PORT", DEFAULT_SERVER_GRPC_PORT).toInt()
-    val configs: List<NodeConfig> = env.getOrDefault("NODES", "50:localhost:4040")
-        .split(",")
-        .map {
-            val uri = it.split(":")
-            if (uri.size != 3) {
-                throw IllegalArgumentException("Invalid NODES environment variable, each comma separated node config " +
-                        "should be in the format of <id>:<host>:<port>. Got: $it")
-            }
-            NodeConfig(uri[0].toInt(), uri[1], uri[2].toInt())
-        }.toList()
+import com.sksamuel.hoplite.ConfigLoaderBuilder
+import com.sksamuel.hoplite.PropertySource
+import com.sksamuel.hoplite.sources.EnvironmentVariablesPropertySource
+import cs416.lambda.capstone.config.ClusterConfig
+import io.github.oshai.kotlinlogging.KotlinLogging
+import java.nio.file.Path
+import kotlin.io.path.Path
 
-    print("Node $nodeId started, listening on $serverPort for node requests")
-    print("Other nodes: $configs")
+private val logger = KotlinLogging.logger {}
 
-    val server = Server(nodeId, serverPort, CLIENT_GRPC_PORT, configs)
+fun main(args: Array<String>) {
+
+    val configPath = loadConfig(args)
+
+    val config = ConfigLoaderBuilder
+        .default()
+        .addDefaultParsers()
+        .addSource(PropertySource.path(configPath))
+        .addSource(EnvironmentVariablesPropertySource(useUnderscoresAsSeparator = true, allowUppercaseNames = true))
+        .withReport()
+        .build()
+        .loadConfigOrThrow<ClusterConfig>()
+
+    val server = Server(config, CLIENT_GRPC_PORT)
     server.start()
     server.blockUntilShutdown()
+}
+
+fun loadConfig(args: Array<String>): Path {
+    return args
+        .toList()
+        .windowed(2)
+        .map { it.first() to it.last() }
+        .find { (key, _) -> key in listOf("-c", "--config") }
+        ?.second
+        ?.let { Path(it) }
+        ?: Path(DEFAULT_CONFIG_PATH)
+            .also { logger.warn { "No config flag given, using default [$it]" } }
+
 }

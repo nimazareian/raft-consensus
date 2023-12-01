@@ -1,28 +1,36 @@
 package cs416.lambda.capstone
 
+import cs416.lambda.capstone.config.ClusterConfig
+import cs416.lambda.capstone.config.NodeConfig
+import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Server
 import io.grpc.ServerBuilder
-import yahoofinance.YahooFinance
 
-data class NodeConfig(val id: Int, val host: String, val port: Int)
+private val logger = KotlinLogging.logger {}
 
 /**
  * Server that manages communication between nodes and clients
  * and passes messages to Raft Node for processing.
  */
 class Server(
-    private val nodeId: Int,
-    private val serverPort: Int,
-    private val clientPort: Int,
-    nodeConfigs: List<NodeConfig>,
+    private val config: ClusterConfig,
+    clientPort: Int,
 ) {
-    // RPC Sender
-    // stub class for communicating with other nodes
-    private val nodes = ArrayList<StubNode>(nodeConfigs.map { n -> StubNode(n.host, n.port) });
+    private val tradeServiceImpl = TradeServiceImpl()
+    private val nodeId = runCatching { config.id.toInt() }
+        .getOrElse { throw IllegalArgumentException("invalid ID for node, and must be an Integer within 0 and the max number of nodes") }
+
+    private val serverPort = config.cluster
+        .find { n -> n.id == nodeId }?.port ?: DEFAULT_SERVER_GRPC_PORT
+        .also {
+            logger.warn { "No port given for node, defaulting to $DEFAULT_SERVER_GRPC_PORT" }
+        }
+
+    private val configs: List<NodeConfig> = config.cluster
+        .filter { n -> n.id != nodeId } // filter this node out
 
     // Node for handling Raft state machine of this node
-    private val node = Node(nodeId, nodes)
-    private val tradeServiceImpl = TradeServiceImpl()
+    private val node = Node(nodeId, configs)
 
     // RPC Listener for Raft
     private val raftService: Server = ServerBuilder
@@ -38,12 +46,14 @@ class Server(
 
     fun start() {
 //        tradingService.start()
-//        println("Node $nodeId started, listening on $clientPort for client requests")
-        println("Node $nodeId started, listening on $serverPort for node requests")
+//        logger.debug { "Node $nodeId started, listening on $clientPort for client requests" }
+        raftService.start()
+        logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
+        logger.debug { "Other nodes: $configs" }
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
-                println("Node $nodeId stopped listening on port $serverPort")
+                logger.warn { "Node $nodeId stopped listening on port $serverPort" }
             }
         )
     }
@@ -51,6 +61,7 @@ class Server(
     private fun stop() {
 //        tradingService.shutdown()
         raftService.shutdown()
+        node.close()
     }
 
     fun blockUntilShutdown() {
@@ -69,9 +80,6 @@ class Server(
         suspend fun getStocks(request: GetStocksRequest): GetStocksReply {
             return tradeService.getStocks(request)
         }
-
-
-
     }
 
     // Receive RPCs from other nodes and forward to Node implementation

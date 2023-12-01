@@ -1,22 +1,62 @@
 package cs416.lambda.capstone
 
+import cs416.lambda.capstone.util.removeRange
+import kotlin.math.min
+
 class NodeLogs {
     @Volatile
     private var entries: MutableList<LogEntry> = mutableListOf()
-        get() = field
+
+    fun isNotEmpty(): Boolean = entries.isNotEmpty()
+    fun lastIndex() = entries.size - 1
 
     var commitIndex: Int = -1
+        private set
 
-    // TODO: Implement
-    fun append(log: LogEntry) {
+    /**
+     * Appends log to end of entries list.
+     */
+    fun append(log: LogEntry) : Int {
+        val index = entries.size
+        entries.add(log)
+//        return the previous index to the caller.
+//        The caller may want to check the state for the index to update before proceeding
+//        Eg.
+//        while (index > state.log.commitIndex -> refering to cluster state) {
+//            delay(50)
+//        }
 
+        return index
     }
 
-    // TODO: Implement
+    operator fun get(prevLogIndex: Int) = entries.getOrNull(prevLogIndex)
+
+
+    /*
+     Sets log entry. Not that this may overwrite old entries.
+     */
+    operator fun set(index: Int, entry: LogEntry) {
+        if (index == entries.size) {
+            entries.add(entry)
+        } else {
+            entries[index] = entry
+        }
+    }
+
     fun commit(index: Int): Boolean {
-        commitIndex = index;
-        return false;
+        val idx = min(lastIndex(), index)
+        commitIndex = idx
+        return true
     }
 
+    fun prune(startIndex: Int) {
+        entries.removeRange(IntRange(startIndex, entries.size))
+    }
 
+    /**
+     * Checks if the given entry's term matches the log entry's term at the given index
+     */
+    fun checkIndexTerm(index: Int, term: Long) : Boolean {
+        return isNotEmpty() && entries[index].term != term
+    }
 }
