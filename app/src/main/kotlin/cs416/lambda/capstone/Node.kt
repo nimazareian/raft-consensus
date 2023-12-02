@@ -123,6 +123,9 @@ class Node(
         this.logs = log
     }
 
+    /**
+     * Process AppendEntriesResponses from followers
+     */
     private fun handleAppendEntriesResponseCallback() = { response: AppendEntriesResponse ->
         logger.debug { "Processing ${response.asString()}" }
         val node = nodes.firstOrNull { it.stubNodeId == response.nodeId }
@@ -136,13 +139,17 @@ class Node(
                 node.nextIndex = ackIndex + 1
 
                 // Update the commit index to the highest log index which the quorum has acknowledged
-                nodes.sortBy { it.matchIndex }
+                val matchIndices: MutableList<Int> = nodes.map { it.matchIndex }.toMutableList()
+                matchIndices.add(logs.lastIndex())
+                matchIndices.sort()
                 // TODO there was bug after election where nodes would try to commit to -1 on empty append (no client req)
-                val quorumIndex = nodes[(nodes.size - 1) / 2].matchIndex
+                val quorumIndex = matchIndices[(matchIndices.size - 1) / 2]
                 if (logs.commitIndex < quorumIndex) {
                     val commitIndex = min(logs.lastIndex(), quorumIndex)
                     logs.commit(commitIndex)
                     logger.debug { "Committing to index $commitIndex" }
+                } else {
+                    logger.debug { "Not updating quorum index on ${logs.commitIndex} as current quorum index is $quorumIndex. matchIndices=$matchIndices" }
                 }
             } else {
                 node.decreaseIndex()
