@@ -34,17 +34,6 @@ class Node(
     // The node that we voted for in the *current term*
     private var votedFor: Int? = null
 
-    /**
-     * Fields used by the Leader node
-     */
-
-    // Map of node ID to the number of log entries we have sent to a follower
-    private var sentLength = mutableMapOf<Int, Long>()
-
-    // Map of node ID to the number of log entries that a follower has acknowledged
-    // to have received
-    private var ackedLength = mutableMapOf<Int, Long>()
-
     private val mutex = Mutex()
 
     private val stateMachine = initializeNodeState(
@@ -351,15 +340,19 @@ class Node(
         }
     }
 
-    suspend fun handleClientRequest(request: ClientAction): Boolean {
+    suspend fun handleClientRequest(request: ClientAction): ActionResponse {
         logger.info { "Handling ${request.asString()}" }
         // TODO: Forward request as a LogEntry to all stub nodes and
         //       once the majority of the nodes have acknowledged the request
         //       commit the request and respond back to the client
         if (stateMachine.state != NodeState.Leader) {
-            // TODO: Respond back to the client that we are not the leader
             logger.warn { "Trying to handle client request while in state ${stateMachine.state}" }
-            return false
+            return actionResponse {
+                type = ActionResponse.ActionResult.INVALID_NODE
+                // TODO: Update field to include leader IP address
+                leaderAddress = currentLeader.toString()
+                leaderPort = CLIENT_GRPC_PORT
+            }
         }
 
         val entry = LogEntry
@@ -383,11 +376,15 @@ class Node(
             delay(5)
             if (System.currentTimeMillis() - commitStartTime > 5000) {
                 logger.warn { "Timed out waiting for log entry to be committed" }
-                return false
+                return actionResponse {
+                    type = ActionResponse.ActionResult.REQUEST_TIMEOUT
+                }
             }
         }
 
-        return true
+        return actionResponse {
+            type = ActionResponse.ActionResult.SUCCESS
+        }
     }
 
     private fun propagateLogToFollowers() {
