@@ -101,21 +101,29 @@ protobuf {
         id("grpckt") {
             artifact = "io.grpc:protoc-gen-grpc-kotlin:${grpcKotlinVersion}:jdk8@jar"
         }
+        id("grpc-web") {
+            path = "/usr/local/bin/protoc-gen-grpc-web"
+        }
     }
     generateProtoTasks {
         all().forEach {
-            it.plugins {
-                id("grpc")
-                id("grpckt")
-            }
             /**
              * Inspired from https://github.com/grpc/grpc-kotlin/blob/master/compiler/README.md
              */
             it.builtins {
                 id("kotlin")
-//                id("")
+                id("js") {
+                    option("import_style=commonjs")
+                }
             }
-
+            it.plugins {
+                id("grpc")
+                id("grpckt")
+                id("grpc-web") {
+                    option("import_style=commonjs")
+                    option("mode=grpcwebtext")
+                }
+            }
         }
     }
 }
