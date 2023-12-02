@@ -376,8 +376,15 @@ class Node(
         propagateLogToFollowers()
 
         // TODO: Consider using a CompletableDeferred instead of polling
+        // Pull on the current commit index until the entry has been committed
+        // or we timeout.
+        val commitStartTime = System.currentTimeMillis()
         while (logs.commitIndex < index) {
             delay(5)
+            if (System.currentTimeMillis() - commitStartTime > 5000) {
+                logger.warn { "Timed out waiting for log entry to be committed" }
+                return false
+            }
         }
 
         return true
@@ -390,8 +397,6 @@ class Node(
         // Set up a timer for the next heartbeat
         runCatching {
             sendHeartBeatTimer.resetTimer()
-        }.onSuccess {
-            logger.debug { "Successfully reset heartbeat timer" }
         }.onFailure {
             logger.debug { "Error occurred resetting heartbeat timer: $it." }
         }
