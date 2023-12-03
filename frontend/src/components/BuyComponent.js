@@ -34,7 +34,13 @@ const BuyComponent = () => {
         console.log("ONSUBMIT HAS BEEN TRIGGERED!");
         console.log(JSON.stringify(buyRequest));
         console.log("========BEFORE GRPC IS CALLED===========");
-
+        const EnvoyUrl = "https://localhost:8000"; //idk if this is the url of the envoy
+        const request = proto.BuyRequest;
+        // const client = proto.TradeClient(EnvoyUrl, null, {}).buyStock(request, {});
+        request.setStock('GME');
+        request.setAmount(500);
+        // const response = await client.buyStock(request, {});
+        console.log(response);
         console.log("========AFTER GRPC IS CALLED============");
     }
 

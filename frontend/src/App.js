@@ -4,6 +4,7 @@ import AccountComponent from "./components/AccountComponent";
 import PortfolioComponent from "./components/PortfolioComponent";
 import BuyComponent from "./components/BuyComponent";
 import SellComponent from "./components/SellComponent";
+
 import styled from "styled-components";
 export const Container = styled.div`
   margin: 2em;
@@ -14,8 +15,8 @@ export const Container = styled.div`
 
 const tradeClient = async(name) => {
     const EnvoyUrl = "https://localhost:8000"; //idk if this is the url of the envoy
-    const client = proto.TradePromiseClient(EnvoyUrl, null, null);
     const request = proto.BuyRequest;
+    // const client = proto.TradeClient(EnvoyUrl, null, {}).buyStock(request, {});
     request.setStock('GME');
     request.setAmount(500);
     const response = await client.buyStock(request, {});
