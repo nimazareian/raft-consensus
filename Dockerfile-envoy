@@ -1,0 +1,13 @@
+FROM    alpine:3.15.1 AS build
+
+ENTRYPOINT ["top", "-b"]
+
+RUN  apk add --no-cache protoc
+
+# build proto descriptor
+RUN     protoc --include_imports --include_source_info \
+          --descriptor_set_out=trade.pb app/build/resources/main/trade.proto
+
+FROM    envoyproxy/envoy:v1.22.0
+
+COPY    trade.pb /tmp/
