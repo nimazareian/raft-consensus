@@ -11,6 +11,7 @@
     "grpc-web": "^1.5.0",
     "node-grpc-client": "^1.5.0",
     "protoc-gen-grpc-web": "^1.4.2",
+    "protoc-gen-js": "^3.21.2",
     "react": "^18.2.0",
     "react-bootstrap": "^2.9.1",
     "react-bootstrap-validation": "^0.1.11",

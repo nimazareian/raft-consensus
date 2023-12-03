@@ -90,6 +90,7 @@ dependencies {
     }
 }
 
+
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:${protobufVersion}"
@@ -98,11 +99,55 @@ protobuf {
         id("grpc") {
             artifact = "io.grpc:protoc-gen-grpc-java:${grpcVersion}"
         }
+        id("js") {
+            path =
+                "$projectDir/../frontend/node_modules/protoc-gen-js/bin/protoc-gen-js"
+        }
+    }
+    generateProtoTasks {
+        all().forEach {
+            it.plugins {
+                id("js") {
+                    option("library")
+//                    option(":../../../../../../../frontend/src/proto/")
+                }
+            }
+        }
+    }
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    }
+    plugins {
+        id("grpc-web") {
+            path =
+                "$projectDir/../frontend/node_modules/protoc-gen-grpc-web/bin/protoc-gen-grpc-web"
+        }
+    }
+    generateProtoTasks {
+        all().forEach {
+            it.plugins {
+                id("grpc-web") {
+                    option("mode=grpcwebtext")
+//                    option("js_out=../../../../../../../frontend/src/proto/")
+//                    option("import_style=library")
+//                    option("../../../../../../../frontend/src/proto/")
+                }
+            }
+        }
+    }
+}
+
+// Generate Kotlin Classes and Files for Protos
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${protobufVersion}"
+    }
+    plugins {
         id("grpckt") {
             artifact = "io.grpc:protoc-gen-grpc-kotlin:${grpcKotlinVersion}:jdk8@jar"
-        }
-        id("grpc-web") {
-            path = "/usr/local/bin/protoc-gen-grpc-web"
         }
     }
     generateProtoTasks {
@@ -112,21 +157,38 @@ protobuf {
              */
             it.builtins {
                 id("kotlin")
-                id("js") {
-                    option("import_style=commonjs")
-                }
             }
             it.plugins {
                 id("grpc")
                 id("grpckt")
-                id("grpc-web") {
-                    option("import_style=commonjs")
-                    option("mode=grpcwebtext")
-                }
             }
         }
     }
 }
+
+val copyJsFiles = tasks.register<Copy>("copyJsFiles") {
+    // Set the source directory
+    from(file("$projectDir/build/generated/source/proto/main/grpc-web/"))
+
+    // Set the destination directory
+    into(file("$projectDir/../frontend/src/proto/"))
+}
+
+val copyWebGrpcFiles = tasks.register<Copy>("copyWebGrpcFiles") {
+    // Set the source directory
+    from(file("$projectDir/build/generated/source/proto/main/js/"))
+
+    // Set the destination directory
+    into(file("$projectDir/../frontend/src/proto/"))
+}
+
+tasks.build {
+    dependsOn(copyJsFiles)
+    dependsOn(copyWebGrpcFiles)
+}
+
+tasks.named("copyJsFiles").configure { dependsOn("generateProto") }
+tasks.named("copyWebGrpcFiles").configure { dependsOn("generateProto") }
 
 // required for correct build execution tasks order
 tasks.named("startScripts").configure { dependsOn("shadowJar") }

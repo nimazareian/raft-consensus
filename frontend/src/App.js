@@ -5,8 +5,6 @@ import PortfolioComponent from "./components/PortfolioComponent";
 import BuyComponent from "./components/BuyComponent";
 import SellComponent from "./components/SellComponent";
 import styled from "styled-components";
-import { TradeClient } from "./proto/app/src/main/proto/trade_grpc_web_pb";
-import { BuyRequest } from "./proto/app/src/main/proto/trade_pb";
 export const Container = styled.div`
   margin: 2em;
   display: grid;
@@ -16,10 +14,10 @@ export const Container = styled.div`
 
 const tradeClient = async(name) => {
     const EnvoyUrl = "https://localhost:8000"; //idk if this is the url of the envoy
-    const client = new TradeClient(EnvoyUrl);
-    // const request = new proto.request;
-    request.setTickr();
-    request.setAmt();
+    const client = proto.TradePromiseClient(EnvoyUrl, null, null);
+    const request = proto.BuyRequest;
+    request.setStock('GME');
+    request.setAmount(500);
     const response = await client.buyStock(request, {});
     console.log(response);
 }
