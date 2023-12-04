@@ -72,13 +72,23 @@ class Server(
         raftService.awaitTermination()
     }
 
-    internal class TradeService(private val tradeService: TradeServiceImpl) : TradeGrpcKt.TradeCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyRequest): BuyReply {
-            return tradeService.buyStock(request)
-        }
-
-        override suspend fun sellStock(request: SellRequest): SellReply {
-            return tradeService.sellStock(request)
+    internal class TradeService(val callback: suspend (ClientAction) -> ActionResponse) : TradeGrpcKt.TradeCoroutineImplBase() {
+        override suspend fun buyStock(request: BuyRequest): BuyResponse {
+            val response = BuyResponse.newBuilder()
+            runCatching {
+                val actionResult = callback(clientAction {
+                    buyRequest = request
+                })
+                response.setPurchased(actionResult.type == ActionResponse.ActionResult.SUCCESS)
+                response.setServerResponse(actionResult)
+            }.onFailure {
+                logger.debug { "Caught error: ${it.cause} and ${it.printStackTrace()}" }
+                response.setPurchased(false)
+                response.setServerResponse(actionResponse {
+                    type = ActionResponse.ActionResult.FAILED
+                })
+            }
+            return response.build()
         }
     }
 

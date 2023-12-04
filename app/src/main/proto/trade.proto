@@ -3,13 +3,13 @@ syntax = "proto3";
 option java_multiple_files = true;
 option java_package = "cs416.lambda.capstone";
 
-// TODO: Added for initial testing - remove
 service Trade {
-  // Sends a greeting
-  rpc BuyStock (BuyRequest) returns (BuyReply);
-  rpc SellStock (SellRequest) returns (SellReply);
+  rpc BuyStock (BuyRequest) returns (BuyResponse);
+  rpc SellStock (SellRequest) returns (SellResponse);
 }
 
+// TODO: Add a unique ID to each request to avoid
+//       the same request from being processed twice
 message BuyRequest {
   string stock = 1;
   int32 amount = 2;
@@ -21,13 +21,26 @@ message SellRequest {
   int32 amount = 2;
 }
 
-
-message BuyReply {
+message BuyResponse {
   bool purchased = 1;
+  ActionResponse serverResponse = 2;
 }
 
-message SellReply {
+message SellResponse {
   bool sold = 1;
   int32 sellAmount = 2;
 }
 
+
+message ActionResponse {
+  enum ActionResult {
+    SUCCESS = 0;
+    INVALID_NODE = 1;
+    REQUEST_TIMEOUT = 2;
+    FAILED = 3;
+  }
+  ActionResult type = 1;
+  // Filled if type == INVALID_NODE
+  string leaderAddress = 2;
+  uint32 leaderPort = 3;
+}
