@@ -12,11 +12,12 @@ private val logger = KotlinLogging.logger {}
 
 fun main(args: Array<String>) {
 
-    val configPath = loadConfig(args)
-
     print(BANNER)
 
     println()
+
+    val configPath = loadConfig(args)
+
 
     val config = ConfigLoaderBuilder
         .default()

@@ -5,8 +5,28 @@ import cs416.lambda.capstone.config.NodeConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.Server
 import io.grpc.ServerBuilder
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.request.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import kotlinx.serialization.Serializable
+
+import cs416.lambda.capstone.BuyRequest as GrpcBuyRequest
+import cs416.lambda.capstone.json.BuyRequest as JsonBuyRequest
+import cs416.lambda.capstone.json.BuyResponse as JsonBuyResponse
 
 private val logger = KotlinLogging.logger {}
+
+@Serializable
+data class Buy(
+    var amount: Int? = null,
+    var stock: String? = null,
+    var actBalance: Int? = null,
+)
 
 /**
  * Server that manages communication between nodes and clients
@@ -39,20 +59,31 @@ class Server(
         .addService(RaftService(node))
         .build()
 
-    // RPC Listener for trading with client
-    private val tradingService: Server = ServerBuilder
-        .forPort(clientPort)
-        .addService(TradeService(tradeServiceImpl))
-        .build()
+    // Server for handling incoming client http requests
+    private val tradingService = embeddedServer(Netty, port = clientPort) {}
+
 
     fun start() {
-        tradingService.start()
-        logger.info { "Node $nodeId started, listening on $clientPort for client requests" }
+        addShutdownHooks()
 
-        raftService.start()
-        logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
+        setupServices()
 
-        logger.debug { "Other nodes: $configs" }
+        startServices()
+    }
+
+    private fun startServices() {
+//        raftService.start().also {
+//            logger.info { "Node $nodeId started, listening on $serverPort for node requests" }
+//            logger.debug { "Other nodes: $configs" }
+//        }
+
+
+        tradingService.start(wait = true).also {
+            logger.info { "Exchange server started, listening on $clientPort for client requests" }
+        }
+    }
+
+    private fun addShutdownHooks() {
         Runtime.getRuntime().addShutdownHook(
             Thread {
                 this@Server.stop()
@@ -61,19 +92,41 @@ class Server(
         )
     }
 
+    private fun setupServices() {
+        // Service class for handling client requests
+        val tradeServiceImpl = TradeServiceImpl()
+        // handle raw json
+        tradingService.application.install(ContentNegotiation) {
+            json()
+        }
+        // Request routing
+        tradingService.application.routing {
+            post("/buy") {
+                val req = call.receive<JsonBuyRequest>()
+                val resp = tradeServiceImpl.buyStock(buyRequest {
+                    amount = req.amount
+                    actBalance = req.actBalance
+                    stock = req.stock
+                })
+                call.respond(
+                    JsonBuyResponse(purchased = resp.purchased)
+                )
+            }
+        }
+    }
+
     private fun stop() {
-        tradingService.shutdown()
+        tradingService.stop()
         raftService.shutdown()
         node.close()
     }
 
     fun blockUntilShutdown() {
-        tradingService.awaitTermination()
         raftService.awaitTermination()
     }
 
     internal class TradeService(val callback: suspend (ClientAction) -> ActionResponse) : TradeGrpcKt.TradeCoroutineImplBase() {
-        override suspend fun buyStock(request: BuyRequest): BuyResponse {
+        override suspend fun buyStock(request: GrpcBuyRequest): BuyResponse {
             val response = BuyResponse.newBuilder()
             runCatching {
                 val actionResult = callback(clientAction {
