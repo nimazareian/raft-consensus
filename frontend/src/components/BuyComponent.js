@@ -3,8 +3,14 @@ import Form from "react-bootstrap/Form";
 import Button from "react-bootstrap/Button";
 import styled from "styled-components";
 import {ButtonWrapper, RowWrapper} from "./SellComponent";
-import {TradeContext} from "../index";
-import {useContext} from "react";
+
+// import("./../proto/trade_pb")
+
+const Messages = require("./../proto/trade_pb.js");
+// const Services = require("./../proto/trade_grpc_web_pb.js");
+
+// const grpc = {}
+// const proto = {}
 export const BuyWrapper = styled.div`
   padding: 1.5rem;
   border: 2px solid grey;
@@ -31,17 +37,21 @@ const BuyComponent = () => {
 
     const onSubmit = (e) => {
         e.preventDefault();
-        console.log("ONSUBMIT HAS BEEN TRIGGERED!");
-        console.log(JSON.stringify(buyRequest));
-        console.log("========BEFORE GRPC IS CALLED===========");
-        const EnvoyUrl = "https://localhost:8000"; //idk if this is the url of the envoy
-        const request = proto.BuyRequest;
-        // const client = proto.TradeClient(EnvoyUrl, null, {}).buyStock(request, {});
-        request.setStock('GME');
-        request.setAmount(500);
-        // const response = await client.buyStock(request, {});
-        console.log(response);
-        console.log("========AFTER GRPC IS CALLED============");
+
+        // for local testing using `npm start`
+        const url = 'http://localhost:6001/buy'
+        // for when using inside docker container
+        // const url = 'http://172.20.0.4:6000/buy'
+        fetch(url, {
+            method: 'POST',
+            body : JSON.stringify({
+                "amount": buyRequest.amt,
+                "stock": buyRequest.tickr,
+                "actBalance": 4000
+            })
+        }).then(resp =>
+            console.log(JSON.stringify(resp.json()))
+        ).catch(e => console.error(e))
     }
 
     return (

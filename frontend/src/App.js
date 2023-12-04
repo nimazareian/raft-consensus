@@ -13,16 +13,6 @@ export const Container = styled.div`
   gap: 1.5em;
 `
 
-const tradeClient = async(name) => {
-    const EnvoyUrl = "https://localhost:8000"; //idk if this is the url of the envoy
-    const request = proto.BuyRequest;
-    // const client = proto.TradeClient(EnvoyUrl, null, {}).buyStock(request, {});
-    request.setStock('GME');
-    request.setAmount(500);
-    const response = await client.buyStock(request, {});
-    console.log(response);
-}
-
 function App() {
     return (
         <Container>
