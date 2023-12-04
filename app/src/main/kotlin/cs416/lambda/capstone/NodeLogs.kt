@@ -28,13 +28,6 @@ class NodeLogs {
     fun append(log: LogEntry): Int {
         val index = entries.size
         entries.add(log)
-//        return the index of log entry that was inserted to the caller.
-//        The caller may want to check the state for the index to update before proceeding
-//        Eg.
-//        while (index > state.log.commitIndex -> refering to cluster state) {
-//            delay(50)
-//        }
-
         return index
     }
 
@@ -78,7 +71,6 @@ class NodeLogs {
     }
 
     override fun toString(): String {
-        // TODO format entries somehow
         return "NodeLogs(count = ${this.entries.size}, commitIndex=${this.commitIndex})"
     }
 }

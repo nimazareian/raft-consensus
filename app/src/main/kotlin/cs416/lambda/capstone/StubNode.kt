@@ -19,20 +19,14 @@ class StubNode(
 
     @Volatile
     // Refers to the index of the next log entry to send to this follower
-    // if last log index on leader (this.logs.lastIndex()) ≥ nextIndex for a follower: send
-    // AppendEntries RPC
-    // TODO reinitialize on election i.e. (leader) set to last log index + 1
-
-    // from RaftKt, leader updates this value to log.lastIndex() + 1 on success
-    // decrease on failure
     var nextIndex: Int = 0
+
     @Volatile
     // Refers to the last log entry known to be committed on follower
     // node.matchIndex = node.nextIndex - 1
     var matchIndex: Int = -1
+
     init {
-        // TODO: Should we wait till the channel is ready?
-        // stub.withWaitForReady()
         logger.debug { "StubNode $address:$port created" }
     }
 

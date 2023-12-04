@@ -71,9 +71,7 @@ class Node(
         logger.debug { "Known stub nodes include $nodes" }
     }
 
-    /** Heartbeats setup **/
-    // TODO: Whenever we stop using one timer to use another, we might
-    //       have to cancel all previous timers
+    /** Timer setup **/
 
     // Used by Follower to detect leader failure
     private val heartBeatTimeoutTimer = ResettableTimer(
@@ -131,7 +129,6 @@ class Node(
                 val matchIndices: MutableList<Int> = nodes.map { it.matchIndex }.toMutableList()
                 matchIndices.add(logs.lastIndex())
                 matchIndices.sort()
-                // TODO there was bug after election where nodes would try to commit to -1 on empty append (no client req)
                 val quorumIndex = matchIndices[(matchIndices.size - 1) / 2]
                 if (logs.commitIndex < quorumIndex) {
                     val commitIndex = min(logs.lastIndex(), quorumIndex)
@@ -206,7 +203,6 @@ class Node(
                     (votedFor == null || votedFor == request.candidateId) &&
                     request.lastLogIndex >= logs.commitIndex
                 ) {
-                    // TODO: When do we reset votedFor
                     votedFor = request.candidateId
                     return@runBlocking response
                         .setCurrentTerm(request.currentTerm)
@@ -248,7 +244,6 @@ class Node(
                 }
 
                 if (request.currentTerm < this@Node.currentTerm) {
-                    // TODO: Include log_ack_len, missing fields
                     return@runBlocking response
                         .setCurrentTerm(this@Node.currentTerm)
                         .setLogAckIndex(logs.lastIndex().toLong())
@@ -261,7 +256,6 @@ class Node(
                         }
                 }
 
-                // TODO maybe use greater or equal
                 if (currentTerm < request.currentTerm) {
                     currentTerm = request.currentTerm
                     votedFor = null
@@ -273,7 +267,6 @@ class Node(
                         }
                 }
 
-                // TODO: need to test later with leader failures
                 // check that prev log entry term of our state matches log entry term of request
                 if (!logs.checkIndexTerm(request.prevLogIndex.toInt(), request.prevLogTerm)) {
                     return@runBlocking response
@@ -293,10 +286,9 @@ class Node(
                 logger.debug { "Starting log update with log = $logs and start = $startIdx and end = $endIdx" }
 
                 // loop through request entries and update the log
-                // TODO bug? endIdx is inclusive
                 (startIdx..<endIdx)
                     .toList()
-                    .zip(request.entriesList) // TODO do we need to reverse list
+                    .zip(request.entriesList)
                     .forEach { (idx, entry) ->
                         if (!logs.checkIndexTerm(idx, entry.term)) {
                             // Existing entry conflicts with new one (same index but different terms)
@@ -310,7 +302,6 @@ class Node(
 
 
                 currentLeader = request.leaderId
-                // TODO BUG?: logs.commit(request.leaderCommitIndex.toInt()) // leader commit index is -1
                 // Assumes that all logs up to end idx is committed
                 val leaderIndex = request.leaderCommitIndex.toInt()
                 // if leader has a greater commit index, then commit up to thew minimum his index, or the last index (write errors may have occured)
@@ -342,9 +333,6 @@ class Node(
 
     suspend fun handleClientRequest(request: ClientAction): ActionResponse {
         logger.info { "Handling ${request.asString()}" }
-        // TODO: Forward request as a LogEntry to all stub nodes and
-        //       once the majority of the nodes have acknowledged the request
-        //       commit the request and respond back to the client
         if (stateMachine.state != NodeState.Leader) {
             logger.warn { "Trying to handle client request while in state ${stateMachine.state}" }
             return actionResponse {
@@ -389,8 +377,6 @@ class Node(
 
     private fun propagateLogToFollowers() {
         logger.debug { "Starting broadcasting to $nodes" }
-        // TODO: Note that doing the timer like this could result in the heartbeats
-        //       not be the exact same duration apart?!
         // Set up a timer for the next heartbeat
         runCatching {
             sendHeartBeatTimer.resetTimer()
@@ -400,8 +386,7 @@ class Node(
 
 
         nodes.map { stubNode ->
-            val prevLogIndexForFollowerNode =
-                stubNode.nextIndex - 1 // TODO index of log entry that precedes entries this node is sending
+            val prevLogIndexForFollowerNode = stubNode.nextIndex - 1
             val prevLogTermForFollowerNode = logs[prevLogIndexForFollowerNode]?.term
 
             if (prevLogIndexForFollowerNode != -1 && prevLogTermForFollowerNode == null) {
@@ -414,7 +399,7 @@ class Node(
                 .setLeaderCommitIndex(this@Node.logs.commitIndex.toLong())
                 .setPrevLogIndex(prevLogIndexForFollowerNode.toLong())
                 .setPrevLogTerm(prevLogTermForFollowerNode ?: -1L)
-                .addAllEntries(this@Node.logs.starting(prevLogIndexForFollowerNode + 1)) // TODO: Include entries
+                .addAllEntries(this@Node.logs.starting(prevLogIndexForFollowerNode + 1))
                 .build()
 
             logger.debug { "Sending ${appendRequest.asShortString()} to $stubNode" }
