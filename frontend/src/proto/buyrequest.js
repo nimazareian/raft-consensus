@@ -27,7 +27,7 @@ goog.require('jspb.Message');
  * @extends {jspb.Message}
  * @constructor
  */
-export default proto.BuyRequest = function(opt_data) {
+proto.BuyRequest = function(opt_data) {
   jspb.Message.initialize(this, opt_data, 0, -1, null, null);
 };
 goog.inherits(proto.BuyRequest, jspb.Message);
