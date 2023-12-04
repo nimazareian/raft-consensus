@@ -193,14 +193,14 @@ protobuf {
                 id("kotlinx-protobuf-gen") {
                     option("package_prefix=cs416.lambda.capstone.json")
                 }
-                id("grpc-tools") {
-                    option("mode=grpcweb")
-                }
-                id("js") {
-                    option("import_style=commonjs")
-                    option("library")
-//                    option("../../../../../../../frontend/src/proto/")
-                }
+//                id("grpc-tools") {
+//                    option("mode=grpcweb")
+//                }
+//                id("js") {
+//                    option("import_style=commonjs")
+//                    option("library")
+////                    option("../../../../../../../frontend/src/proto/")
+//                }
             }
         }
     }
