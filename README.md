@@ -53,8 +53,9 @@ and updating the `config.json` with the new node information.
 ---
 
 ## Next Steps
--[ ] Support dynamic membership changes (Section 6 of Raft paper) (i.e. adding/removing nodes from the cluster)
--[ ] Implement snapshotting and sharing of snapshots between nodes (Section 7 of Raft paper)
+- [ ] Support dynamic membership changes (Section 6 of Raft paper) (i.e. adding/removing nodes from the cluster)
+
+- [ ] Implement snapshotting and sharing of snapshots between nodes (Section 7 of Raft paper)
 
 ‼️ _Note that this repository is for educational purpose and should not be used in production!_ 
 
