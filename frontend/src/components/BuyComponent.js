@@ -4,13 +4,6 @@ import Button from "react-bootstrap/Button";
 import styled from "styled-components";
 import {ButtonWrapper, RowWrapper} from "./SellComponent";
 
-// import("./../proto/trade_pb")
-
-const Messages = require("./../proto/trade_pb.js");
-// const Services = require("./../proto/trade_grpc_web_pb.js");
-
-// const grpc = {}
-// const proto = {}
 export const BuyWrapper = styled.div`
   padding: 1.5rem;
   border: 2px solid grey;
