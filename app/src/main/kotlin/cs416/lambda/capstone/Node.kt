@@ -457,6 +457,9 @@ class Node(
     private fun startSendingHeartBeats() {
         logger.debug { "Starting to send heartbeats" }
 
+        // Reset previously tracked follower node states
+        nodes.forEach { n -> n.resetIndices() }
+
         // Cancel timers for previous states
         heartBeatTimeoutTimer.cancel()
         electionTimeoutTimer.cancel()
