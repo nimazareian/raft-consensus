@@ -30,6 +30,11 @@ class StubNode(
         logger.debug { "StubNode $address:$port created" }
     }
 
+    fun resetIndices() {
+        nextIndex = 0
+        matchIndex = -1
+    }
+
     fun decreaseIndex() {
         if (nextIndex > 0) {
             nextIndex -= 1

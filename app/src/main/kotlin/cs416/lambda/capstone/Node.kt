@@ -337,9 +337,10 @@ class Node(
             logger.warn { "Trying to handle client request while in state ${stateMachine.state}" }
             return actionResponse {
                 type = ActionResponse.ActionResult.INVALID_NODE
-                // TODO: Update field to include leader IP address
-                leaderAddress = currentLeader.toString()
-                leaderPort = CLIENT_GRPC_PORT
+                nodes.firstOrNull { it.stubNodeId == currentLeader }?.let { leader ->
+                    leaderAddress = leader.address
+                    leaderPort = leader.port
+                }
             }
         }
 
