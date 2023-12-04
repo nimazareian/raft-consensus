@@ -47,17 +47,17 @@ services:
       default:
         ipv4_address: 172.20.0.3
 
-  envoy_service:
-    build:
-      context: .
-      dockerfile: Dockerfile-envoy
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./envoy.yaml:/etc/envoy/envoy.yaml
-    networks:
-      default:
-        ipv4_address: 172.20.0.20
+#  envoy_service:
+#    build:
+#      context: .
+#      dockerfile: Dockerfile-envoy
+#    ports:
+#      - "8000:8000"
+##    volumes:
+##      - ./envoy.yaml:/etc/envoy/envoy.yaml
+#    networks:
+#      default:
+#        ipv4_address: 172.20.0.20
 
 
 networks:
