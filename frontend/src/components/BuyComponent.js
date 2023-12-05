@@ -37,7 +37,7 @@ const BuyComponent = () => {
         // const url = 'http://172.20.0.4:6000/buy'
         fetch(url, {
             method: 'POST',
-            body : JSON.stringify({
+            body: JSON.stringify({
                 "amount": buyRequest.amt,
                 "stock": buyRequest.tickr,
                 "actBalance": 4000

@@ -4,8 +4,12 @@ import AccountComponent from "./components/AccountComponent";
 import PortfolioComponent from "./components/PortfolioComponent";
 import BuyComponent from "./components/BuyComponent";
 import SellComponent from "./components/SellComponent";
+import LoginComponent from "./components/LoginComponent";
+import {createContext} from "react";
 
 import styled from "styled-components";
+import {UserProvider} from "./context/UserContext";
+
 export const Container = styled.div`
   margin: 2em;
   display: grid;
@@ -14,12 +18,16 @@ export const Container = styled.div`
 `
 
 function App() {
+
     return (
         <Container>
-            <AccountComponent></AccountComponent>
-            <PortfolioComponent></PortfolioComponent>
-            <BuyComponent></BuyComponent>
-            <SellComponent></SellComponent>
+            <UserProvider>
+                <AccountComponent></AccountComponent>
+                <PortfolioComponent></PortfolioComponent>
+                <BuyComponent></BuyComponent>
+                <SellComponent></SellComponent>
+                <LoginComponent></LoginComponent>
+            </UserProvider>
         </Container>
     );
 }
