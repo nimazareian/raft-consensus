@@ -59,13 +59,11 @@ const LoginComponent = () => {
     const handleRegister = () => {
         //1. add user to context
         console.log(addUser(user));
-        if(addUser(user)) {
-            //load users info
-            setShowModal(false);
-            // console.log("USER HAS BEEN ADDED");
-        } else {
+        if(!addUser(user)) {
             setShowRegisterAlert(true);
-            // console.log("USER ALREADY EXISTS");
+            //load users info
+            // setShowModal(false);
+            // console.log("USER HAS BEEN ADDED");
         }
 
         // console.log(JSON.stringify(users));
