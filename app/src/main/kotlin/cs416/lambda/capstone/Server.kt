@@ -107,6 +107,8 @@ class Server(
             allowHeader(HttpHeaders.ContentType)
             allowHeader(HttpHeaders.Accept)
             allowHeader(HttpHeaders.Authorization)
+            allowHeader("X-Requested-With")
+            allowHeader(HttpHeaders.Origin)
             allowHeader(HttpHeaders.AccessControlAllowOrigin)
             allowNonSimpleContentTypes = true
             allowCredentials = true

@@ -10,11 +10,11 @@ export const getServerUrl = ({address, port}) => {
 }
 
 export const parseServerResponse = (resp, setLeader, reSubmit) => {
-    if (!resp.sold) {
+    if (resp.success || resp.sold || resp.purchased) {
+        console.log('success!')
+    } else {
         const leader = resp.serverResponse
         setLeader(leader.leaderAddress, leader.leaderPort)
         reSubmit()
-    } else {
-        console.log('success!')
     }
 }
