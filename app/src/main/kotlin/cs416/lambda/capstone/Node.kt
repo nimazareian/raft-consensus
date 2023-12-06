@@ -355,8 +355,8 @@ class Node(
             return actionResponse {
                 type = ActionResponse.ActionResult.INVALID_NODE
                 nodes.firstOrNull { it.stubNodeId == currentLeader }?.let { leader ->
-                    leaderAddress = leader.address
-                    leaderPort = leader.port
+                    leaderAddress = leader.connectionInfo.address
+                    leaderPort = leader.connectionInfo.port
                 }
             }
         }
