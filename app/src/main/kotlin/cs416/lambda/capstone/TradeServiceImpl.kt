@@ -1,5 +1,6 @@
 package cs416.lambda.capstone
 
+import cs416.lambda.capstone.ActionResponse
 import cs416.lambda.capstone.util.errorActionResponse
 import cs416.lambda.capstone.util.toGrpcRequest
 import cs416.lambda.capstone.util.toJsonResponse
@@ -29,7 +30,7 @@ class TradeServiceImpl(private val node: Node) {
     private fun errorSellResponse(mode: JsonActionResponse.ActionResult = JsonActionResponse.ActionResult.FAILED) =
         JsonSellResponse(sold = false, errorActionResponse(node.getLeaderInfo(), mode))
 
-
+    // TODO better error bubbling
     suspend fun buyStock(request: JsonBuyRequest): JsonBuyResponse {
         logger.info { "Buy request received: $request" }
         // https://query2.finance.yahoo.com/v8/finance/chart/GME
@@ -48,16 +49,27 @@ class TradeServiceImpl(private val node: Node) {
                     else -> {
                         if (portfolios.containsKey(request.name)) {
                             val user = portfolios[request.name]
-                                ?: return errorBuyResponse()
+                                ?: throw NotFoundException("User not found")
+
                             val stockPrice = (10..100).random()
 
                             if (stockPrice * request.amount <= user.balance) {
+                                // up[date user balance
+                                logger.info { "Propagating to  client request nodes" }
                                 val action = ClientAction.newBuilder().setBuyRequest(it).build()
                                 val resp = node.handleClientRequest(action)
-                                JsonBuyResponse(
-                                    purchased = resp.type == GrpcActionResponse.ActionResult.SUCCESS,
-                                    serverResponse = resp.toJsonResponse()
-                                )
+                                if (resp.type == ActionResponse.ActionResult.SUCCESS) {
+                                    logger.info { "Updating user portfolio" }
+                                    user.portfolio.merge(request.stock, request.amount, Int::plus)
+                                    user.balance -= request.amount * stockPrice
+                                    JsonBuyResponse(
+                                        purchased = true,
+                                        serverResponse = resp.toJsonResponse()
+                                    )
+                                } else {
+                                    errorBuyResponse()
+                                }
+
                             } else {
                                 logger.warn { "Not enough balance in account for user $user" }
                                 errorBuyResponse()
@@ -84,15 +96,21 @@ class TradeServiceImpl(private val node: Node) {
                     }
                     else -> {
                         if (portfolios.containsKey(request.name)) {
-                            val user = portfolios[request.name] ?: return errorSellResponse()
-                            val stock = user.portfolio[request.stock] ?: throw NotFoundException("Stock not found")
-                            if (request.amount <= stock) {
+                            val user = portfolios[request.name] ?: throw NotFoundException("User portfolio not found")
+                            val stockPrice = user.portfolio[request.stock] ?: throw NotFoundException("Stock not found")
+                            if (request.amount <= stockPrice) {
                                 val action = ClientAction.newBuilder().setSellRequest(it).build()
                                 val resp = node.handleClientRequest(action)
-                                JsonSellResponse(
-                                    sold = resp.type == GrpcActionResponse.ActionResult.SUCCESS,
-                                    serverResponse = resp.toJsonResponse()
-                                )
+                                if (resp.type == GrpcActionResponse.ActionResult.SUCCESS) {
+                                    user.portfolio.merge(request.stock, request.amount, Int::minus)
+                                    user.balance += request.amount * stockPrice
+                                    JsonSellResponse(
+                                        sold = resp.type == GrpcActionResponse.ActionResult.SUCCESS,
+                                        serverResponse = resp.toJsonResponse()
+                                    )
+                                } else {
+                                    errorSellResponse()
+                                }
                             } else {
                                 logger.warn { "Not enough assets in portfolio to sell in user account $user" }
                                 errorSellResponse()
