@@ -97,6 +97,13 @@ class Server(
         // configure CORS
         tradingService.application.install(CORS) {
             anyHost()
+            allowMethod(HttpMethod.Get)
+            allowMethod(HttpMethod.Post)
+            allowMethod(HttpMethod.Head)
+            allowMethod(HttpMethod.Options)
+            allowMethod(HttpMethod.Put)
+            allowMethod(HttpMethod.Patch)
+            allowMethod(HttpMethod.Delete)
             allowHeader(HttpHeaders.ContentType)
             allowHeader(HttpHeaders.Accept)
             allowHeader(HttpHeaders.Authorization)
