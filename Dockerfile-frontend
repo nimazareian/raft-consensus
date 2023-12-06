@@ -1,0 +1,8 @@
+FROM ubuntu:latest
+FROM node:16.15.1-buster
+LABEL authors="boris"
+
+COPY ./frontend /usr/src/frontend/
+WORKDIR /usr/src/frontend
+RUN npm install
+CMD ["npm", "start"]
