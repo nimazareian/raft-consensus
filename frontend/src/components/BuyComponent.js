@@ -43,9 +43,13 @@ const BuyComponent = () => {
         // const url = 'http://172.20.0.4:6000/buy'
         fetch(`${url}/buy`, {
             method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
-                "amount": buyRequest.amt,
                 "stock": buyRequest.tickr,
+                "amount": parseInt(buyRequest.amt, 10),
                 "name": currUser.email
             })
         })

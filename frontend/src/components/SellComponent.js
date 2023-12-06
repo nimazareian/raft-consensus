@@ -52,6 +52,10 @@ const SellComponent = () => {
         console.log(`sending request to ${url}`)
         fetch(`${url}/sell`, {
             method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
                 "name": currUser,
                 "stock": sellRequest.tickr,
