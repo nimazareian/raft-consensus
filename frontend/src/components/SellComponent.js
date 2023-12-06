@@ -57,9 +57,9 @@ const SellComponent = () => {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                "name": currUser,
+                "name": currUser.email,
                 "stock": sellRequest.tickr,
-                "amount": sellRequest.amt,
+                "amount": parseInt(sellRequest.amt, 10),
             })
         })
             .then(resp => resp.json())
