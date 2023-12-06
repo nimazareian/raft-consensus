@@ -10,6 +10,9 @@
     </root>
 
 <!--    Only show logs from Node and Server class-->
+    <logger name="cs416.lambda.capstone.TradeServiceImpl" level="debug" additivity="false">
+        <appender-ref ref="STDOUT" />
+    </logger>
     <logger name="cs416.lambda.capstone.Node" level="debug" additivity="false">
         <appender-ref ref="STDOUT" />
     </logger>

@@ -1,0 +1,19 @@
+{
+  "hosts": [
+    {
+      "id": 1,
+      "port": 6001,
+      "address": "localhost"
+    },
+    {
+      "id": 2,
+      "port": 6002,
+      "address": "localhost"
+    },
+    {
+      "id": 3,
+      "port": 6003,
+      "address": "localhost"
+    }
+  ]
+}

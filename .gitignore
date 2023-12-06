@@ -30,4 +30,7 @@ replay_pid*
 .idea
 
 # Ignore Gradle build output directory
-build
+/app/build
+
+# Ignore npm packages
+/frontend/node_modules

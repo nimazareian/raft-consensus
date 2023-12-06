@@ -1,4 +1,5 @@
 package cs416.lambda.capstone
+import cs416.lambda.capstone.util.NodeConnectionInfo
 import io.github.oshai.kotlinlogging.KotlinLogging
 import io.grpc.ManagedChannelBuilder
 import io.grpc.stub.StreamObserver
@@ -9,12 +10,11 @@ private val logger = KotlinLogging.logger { }
 
 class StubNode(
     val stubNodeId: Int,
-    val address: String,
-    val port: Int,
+    val connectionInfo: NodeConnectionInfo,
     private val requestVoteResponseObserver: StreamObserver<VoteResponse>,
     private val appendEntriesResponseStreamObserver: StreamObserver<AppendEntriesResponse>
 ) : Closeable {
-    private val channel = ManagedChannelBuilder.forAddress(address, port).usePlaintext().build()
+    private val channel = ManagedChannelBuilder.forAddress(connectionInfo.address, connectionInfo.port).usePlaintext().build()
     private val stub = RaftServiceGrpc.newStub(channel)
 
     @Volatile
@@ -27,7 +27,7 @@ class StubNode(
     var matchIndex: Int = -1
 
     init {
-        logger.debug { "StubNode $address:$port created" }
+        logger.debug { "StubNode $this created" }
     }
 
     fun resetIndices() {
@@ -54,6 +54,6 @@ class StubNode(
     }
 
     override fun toString(): String {
-        return "StubNode(id=$stubNodeId, host='$address', port=$port)"
+        return "StubNode(id=$stubNodeId, host='${connectionInfo.address}', port=${connectionInfo.port})"
     }
 }

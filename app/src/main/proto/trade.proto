@@ -4,25 +4,32 @@ option java_multiple_files = true;
 option java_package = "cs416.lambda.capstone";
 
 service Trade {
-  rpc BuyStock (BuyRequest) returns (BuyResponse) {}
+  rpc BuyStock (BuyRequest) returns (BuyResponse);
+  rpc SellStock (SellRequest) returns (SellResponse);
 }
 
-// TODO: Add a unique ID to each request to avoid
-//       the same request from being processed twice
 message BuyRequest {
   string stock = 1;
   int32 amount = 2;
+  string name = 4;
 }
 
 message SellRequest {
   string stock = 1;
   int32 amount = 2;
+  string name = 4;
 }
 
 message BuyResponse {
   bool purchased = 1;
   ActionResponse serverResponse = 2;
 }
+
+message SellResponse {
+  bool sold = 1;
+  ActionResponse serverResponse = 2;
+}
+
 
 message ActionResponse {
   enum ActionResult {
