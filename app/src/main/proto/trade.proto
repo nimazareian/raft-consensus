@@ -8,17 +8,16 @@ service Trade {
   rpc SellStock (SellRequest) returns (SellResponse);
 }
 
-// TODO: Add a unique ID to each request to avoid
-//       the same request from being processed twice
 message BuyRequest {
   string stock = 1;
   int32 amount = 2;
-  int32 actBalance = 3;
+  string name = 4;
 }
 
 message SellRequest {
   string stock = 1;
   int32 amount = 2;
+  string name = 4;
 }
 
 message BuyResponse {
@@ -28,7 +27,7 @@ message BuyResponse {
 
 message SellResponse {
   bool sold = 1;
-  int32 sellAmount = 2;
+  ActionResponse serverResponse = 2;
 }
 
 

@@ -21,12 +21,16 @@ const AccountComponent = () => {
     const {leader, setLeader} = useLeaderContext()
     const updateBalance = () => {
         const url = getServerUrl(leader)
-        console.log(`sending request to ${url} with name ${currUser} and amount ${depositAmount}`)
+        console.log(`sending request to ${url}/deposit with name ${currUser.email} and amount ${depositAmount}`)
         fetch(`${url}/deposit`, {
-            method: 'POST',
+            method: 'post',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json'
+            },
             body: JSON.stringify({
-                "name": "wow",
-                "amount": 4,
+                "name": currUser.email,
+                "amount": depositAmount,
             })
         })
             .then(resp => resp.json())

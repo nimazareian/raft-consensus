@@ -4,6 +4,7 @@ import cs416.lambda.capstone.config.NodeConfig
 import cs416.lambda.capstone.state.Event
 import cs416.lambda.capstone.state.NodeState
 import cs416.lambda.capstone.state.initializeNodeState
+import cs416.lambda.capstone.util.NodeConnectionInfo
 import cs416.lambda.capstone.util.ObserverFactory
 import cs416.lambda.capstone.util.asFullString
 import cs416.lambda.capstone.util.asString
@@ -20,6 +21,7 @@ private val logger = KotlinLogging.logger {}
 
 class Node(
     private val nodeId: Int,
+    private val connectionInfo: NodeConnectionInfo,
     nodeConfigs: List<NodeConfig>
 ) {
     private var currentTerm: Long = 0
@@ -44,9 +46,44 @@ class Node(
 
     private val nodes: ArrayList<StubNode> = arrayListOf()
 
+    private lateinit var heartBeatTimeoutTimer: ResettableTimer
+    private lateinit var electionTimeoutTimer: ResettableTimer
+    private lateinit var sendHeartBeatTimer: ResettableTimer
+
+    fun start() {
+        /** Heartbeats setup **/
+        // TODO: Whenever we stop using one timer to use another, we might
+        //       have to cancel all previous timers
+
+        // Used by Follower to detect leader failure
+        heartBeatTimeoutTimer = ResettableTimer(
+            callback = this::heartBeatTimeout,
+            delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
+            startNow = true,
+            initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
+        )
+
+        // Used by Candidate during elections
+        electionTimeoutTimer = ResettableTimer(
+            callback = this::electionTimeout,
+            delay = MIN_ELECTION_TIMEOUT_MS,
+            startNow = false,
+        )
+
+        // Used by Leader to send heartbeats
+        sendHeartBeatTimer = ResettableTimer(
+            callback = this::sendHeartbeat,
+            delay = SEND_HEART_BEAT_TIMER_MS,
+            startNow = false,
+        )
+        logger.debug { "Node $nodeId started, listening on ${connectionInfo.address}:${connectionInfo.port} for node requests" }
+        logger.debug { "Known cluster nodes include $nodes" }
+    }
+
 
     init {
-        val requestVoteResponseObserver = ObserverFactory.buildProtoObserver(mutex, handleVoteResponseCallback())
+        val requestVoteResponseObserver =
+            ObserverFactory.buildProtoObserver(mutex, handleVoteResponseCallback())
 
         val appendEntriesResponseStreamObserver =
             ObserverFactory.buildProtoObserver(mutex, handleAppendEntriesResponseCallback())
@@ -58,44 +95,14 @@ class Node(
                 .map { n ->
                     StubNode(
                         n.id,
-                        n.address,
-                        n.port,
+                        NodeConnectionInfo(n.address, n.port),
                         requestVoteResponseObserver,
                         appendEntriesResponseStreamObserver
                     )
                 }
             )
         )
-
-        logger.debug { "Node $nodeId created" }
-        logger.debug { "Known stub nodes include $nodes" }
     }
-
-    /** Heartbeats setup **/
-    // TODO: Whenever we stop using one timer to use another, we might
-    //       have to cancel all previous timers
-
-    // Used by Follower to detect leader failure
-    private val heartBeatTimeoutTimer = ResettableTimer(
-        callback = this::heartBeatTimeout,
-        delay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
-        startNow = true,
-        initialDelay = MIN_HEART_BEAT_TIMEOUT_MS + nodeId * HEART_BEAT_TIMEOUT_MULTIPLIER_MS,
-    )
-
-    // Used by Candidate during elections
-    private val electionTimeoutTimer = ResettableTimer(
-        callback = this::electionTimeout,
-        delay = MIN_ELECTION_TIMEOUT_MS,
-        startNow = false,
-    )
-
-    // Used by Leader to send heartbeats
-    private val sendHeartBeatTimer = ResettableTimer(
-        callback = this::sendHeartbeat,
-        delay = SEND_HEART_BEAT_TIMER_MS,
-        startNow = false,
-    )
 
     /**
      * Node constructor used for loading a node from disk
@@ -105,8 +112,9 @@ class Node(
         currentTerm: Long,
         votedFor: Int,
         log: NodeLogs,
+        connectionInfo: NodeConnectionInfo,
         nodeConfigs: List<NodeConfig>
-    ) : this(nodeId, nodeConfigs) {
+    ) : this(nodeId, connectionInfo, nodeConfigs) {
         this.currentTerm = currentTerm
         this.votedFor = votedFor
         this.logs = log
@@ -340,6 +348,13 @@ class Node(
         }
     }
 
+    fun getLeaderInfo(): NodeConnectionInfo? {
+        return when (nodeId) {
+            currentLeader -> connectionInfo
+            else -> nodes.find { it.stubNodeId == currentLeader }?.connectionInfo
+        }
+    }
+
     suspend fun handleClientRequest(request: ClientAction): ActionResponse {
         logger.info { "Handling ${request.asString()}" }
         // TODO: Forward request as a LogEntry to all stub nodes and
@@ -458,7 +473,7 @@ class Node(
 
         // Asynchronously send vote requests to all nodes and update the tracked state
         nodes.map { n ->
-            logger.debug { "Requesting vote from node ${n.address}:${n.port}" }
+            logger.debug { "Requesting vote from node $n" }
             n.requestVote(voteRequest {
                 candidateId = this@Node.nodeId
                 currentTerm = this@Node.currentTerm
