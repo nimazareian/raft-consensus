@@ -1,6 +1,9 @@
-import React, {useEffect, useState} from 'react';
-import {Col, Row, Form, Button} from "react-bootstrap";
+import React, {useState} from 'react';
+import { Row, Form, Button} from "react-bootstrap";
 import styled from "styled-components";
+import {useUserContext} from "../context/UserContext";
+import {useLeaderContext} from "../context/LeaderContext";
+import {getServerUrl, parseServerResponse} from "../util/util";
 
 export const SellWrapper = styled.div`
   //background: blue;
@@ -9,6 +12,7 @@ export const SellWrapper = styled.div`
   border-radius: 15px;
   grid-column: span 2;
 `
+
 export const RowWrapper = styled(Row)`
   width: 100%;
   margin-top: 1em;
@@ -23,7 +27,14 @@ export const ButtonWrapper = styled.div`
   display: flex;
   justify-content: center;
 `
+
+
+
 const SellComponent = () => {
+    const {currUser} = useUserContext()
+    const {leader, setLeader} = useLeaderContext()
+
+
     const [sellRequest, setSellRequest] = useState({
         tickr: '',
         amt: ''
@@ -37,10 +48,21 @@ const SellComponent = () => {
         });
     }
     const onSubmit = (e) => {
-        e.preventDefault()
-        console.log("ONSUBMIT HAS BEEN TRIGGERED!");
-        console.log(JSON.stringify(sellRequest));
-        //TODO: SEND REQUEST TO LEADER NODE
+        const url = getServerUrl(leader)
+        console.log(`sending request to ${url}`)
+        fetch(`${url}/sell`, {
+            method: 'POST',
+            body: JSON.stringify({
+                "name": currUser,
+                "stock": sellRequest.tickr,
+                "amount": sellRequest.amt,
+            })
+        })
+            .then(resp => resp.json())
+            .then(resp => {
+                parseServerResponse(resp, setLeader, onSubmit)
+            })
+            .catch(e => console.error(e))
     }
 
     return (

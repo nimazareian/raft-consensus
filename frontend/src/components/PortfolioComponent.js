@@ -1,6 +1,6 @@
-import React, {useEffect, useState} from 'react';
-import {Col, Row} from "react-bootstrap";
+import React from 'react';
 import styled from "styled-components";
+
 export const PortfolioWrapper = styled.div`
   grid-column: span 2;
   border: 2px solid grey;
@@ -10,7 +10,7 @@ export const PortfolioWrapper = styled.div`
 const PortFolio = () => {
     return (
         <PortfolioWrapper>
-            <h1>Porfolio:</h1>
+            <h1>Portfolio:</h1>
         </PortfolioWrapper>
     );
 };

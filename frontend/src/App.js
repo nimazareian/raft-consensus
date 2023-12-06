@@ -5,10 +5,10 @@ import PortfolioComponent from "./components/PortfolioComponent";
 import BuyComponent from "./components/BuyComponent";
 import SellComponent from "./components/SellComponent";
 import LoginComponent from "./components/LoginComponent";
-import {createContext} from "react";
 
 import styled from "styled-components";
 import {UserProvider} from "./context/UserContext";
+import {LeaderProvider} from "./context/LeaderContext";
 
 export const Container = styled.div`
   margin: 2em;
@@ -21,13 +21,15 @@ function App() {
 
     return (
         <Container>
-            <UserProvider>
-                <AccountComponent></AccountComponent>
-                <PortfolioComponent></PortfolioComponent>
-                <BuyComponent></BuyComponent>
-                <SellComponent></SellComponent>
-                <LoginComponent></LoginComponent>
-            </UserProvider>
+            <LeaderProvider>
+                <UserProvider>
+                    <AccountComponent></AccountComponent>
+                    <PortfolioComponent></PortfolioComponent>
+                    <BuyComponent></BuyComponent>
+                    <SellComponent></SellComponent>
+                    <LoginComponent></LoginComponent>
+                </UserProvider>
+            </LeaderProvider>
         </Container>
     );
 }
