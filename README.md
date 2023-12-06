@@ -34,10 +34,18 @@ with the implementation of each specific state, event, and action being in [`Nod
 1. Install docker. You can find the instructions for your OS here: https://docs.docker.com/get-docker/
 2. Build the repository (generates the jar file) with `./gradlew build`
 3. Create a Docker image with the jar file with the following command: `docker build -t raft-trading-server:latest .`
-4. Run the simulated environment with 3 containers representing 3 separate raft nodes: `docker compose up -d`
+4. Create a Docker image for the frontend with the following command: `docker build -f Dockerfile-frontend -t raft-trading-frontend:latest .`
+5. Run the simulated environment with 3 containers representing 3 separate raft nodes: `docker compose up -d`
    - Note that the `-d` flag is use for running in daemon thread. You definitely *WANT* to do this, especially on compose,
     since if you don't include it, the container(s) will be tied to the terminal session in which it was called, 
     and will stop if you hit ^C or close the window. 
+   - The frontend runs on `http://localhost:80`
+     - You can use any login parameters, for example:
+       1. Fill in email and password such as `cs416` and password `raft` (there's no security on this so don't put anything sensitive)
+       2. Click on `Register` to create account - nothing happens and that's ok
+       3. Click on `Login` to close the modal
+     - You can then deposit any amount into your balance, and then purchase any stock such `GME` for 5 shares.
+     - Selling shares will also remove those and add balance to account
 
 ### Observing the Raft Algorithm
 **Docker Desktop** and **Intellij IDEA** are great applications for observing the logs of each Docker container (representing a single Raft node) and the progress of the Raft algorithm.
